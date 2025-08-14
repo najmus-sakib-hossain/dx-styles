@@ -38,7 +38,7 @@ pub fn generate_css(
     };
 
     if css_rules.is_empty() {
-        fs::write(output_path, "").expect("Failed to write empty CSS file");
+        crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
         return;
     }
 
@@ -53,10 +53,10 @@ pub fn generate_css(
                 ..Default::default()
             })
             .expect("Failed to minify CSS");
-        fs::write(output_path, minified_css.code.as_bytes())
+        crate::utils::write_buffered(output_path, minified_css.code.as_bytes())
             .expect("Failed to write minified CSS");
     } else {
-        fs::write(output_path, css_content).expect("Failed to write CSS file");
+        crate::utils::write_buffered(output_path, css_content.as_bytes()).expect("Failed to write CSS file");
     }
 }
 

@@ -1,6 +1,8 @@
 use colored::Colorize;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::io::{self, BufWriter, Write};
+use std::fs::OpenOptions;
 use walkdir::WalkDir;
 
 pub struct ChangeTimings {
@@ -18,6 +20,15 @@ pub fn find_code_files(dir: &Path) -> Vec<PathBuf> {
         .filter(|e| is_code_file(e.path()))
         .map(|e| e.path().canonicalize().unwrap_or_else(|_| e.path().to_path_buf()))
         .collect()
+}
+
+/// Buffered write helper that mirrors the fast update logic used in dx_io.
+pub fn write_buffered(path: &Path, data: &[u8]) -> io::Result<()> {
+    let file = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(data)?;
+    writer.flush()?;
+    Ok(())
 }
 
 pub fn is_code_file(path: &Path) -> bool {

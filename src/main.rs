@@ -32,7 +32,11 @@ fn main() {
             [dynamic]
             [generators]"#,
         )
-        .expect("Failed to create styles.toml!");
+        .map_err(|e| {
+            eprintln!("Failed to create styles.toml: {}", e);
+            e
+        })
+        .and_then(|_| crate::utils::write_buffered(&styles_toml_path, b"[static]\n[dynamic]\n[generators]\n")).expect("Failed to create styles.toml!");
     }
 
     if !styles_bin_path.exists() {
