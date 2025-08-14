@@ -1,21 +1,39 @@
-.text-lg {
-  font-size: 1.125rem;
+.text-4xl {
+  font-size: 2.25rem;
 }
 
-.container-type-inline-size {
-  container-type: inline-size;
+@container (min-width: 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
+}
+
+.flex {
+  display: flex;
+}
+
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
+}
+
+.resize-x {
+  resize: horizontal;
 }
 
 .max-w-5xl {
   max-width: 64rem;
 }
 
-.overflow-auto {
-  overflow: auto;
+.p-6 {
+  padding: 1.5rem;
 }
 
-.max-w-full {
-  max-width: 100%;
+.duration-300 {
+  transition-duration: 300ms;
+}
+
+.p-4 {
+  padding: 1rem;
 }
 
 @container (min-width: 42rem) {
@@ -24,13 +42,59 @@
   }
 }
 
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
+.max-w-full {
+  max-width: 100%;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+.mt-8 {
+  margin-top: 2rem;
+}
+
+.font-bold {
+  font-weight: 700;
 }
 
 @container (min-width: 24rem) {
   .\@sm\:text-xl {
     font-size: 1.25rem;
+  }
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
   }
 }
 
@@ -40,78 +104,18 @@
   }
 }
 
-.p-4 {
-  padding: 1rem;
-}
-
-@container (min-width: 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
 .rounded-lg {
   border-radius: 0.5rem;
-}
-
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.text-4xl {
-  font-size: 2.25rem;
 }
 
 .w-screen {
   width: 100vw;
 }
 
-.absolute {
-  position: absolute;
+.transition-all {
+  transition-property: all;
 }
 
-.p-5 {
-  padding: 1.25rem;
+.p-2 {
+  padding: 0.5rem;
 }
