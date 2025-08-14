@@ -93,11 +93,15 @@ pub fn append_new_classes(
 }
 
 // ID-based full generation (after migration complete)
+// Full generation (sorted) with optional formatting in non-production environments.
+// When force_format is true we still run through lightningcss's parser/printer even if not minifying
+// to achieve deterministic canonical formatting (used for initial scan to avoid diff churn).
 pub fn generate_css_ids(
     class_ids: &HashSet<u32>,
     output_path: &Path,
     engine: &StyleEngine,
     interner: &ClassInterner,
+    force_format: bool,
 ) {
     let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
     sorted.sort_unstable();
@@ -108,41 +112,49 @@ pub fn generate_css_ids(
         return;
     }
 
-    // Fast path for dev: stream rules to disk using a buffered writer to avoid huge intermediate allocations.
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
-    if !is_production {
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(output_path)
-            .expect("Failed to open CSS file for writing");
-        let mut writer = BufWriter::new(file);
-        for (i, rule) in css_rules.iter().enumerate() {
-            if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
-            writer.write_all(rule.as_bytes()).expect("write rule");
-        }
-        // Ensure exactly one blank line at EOF (two newlines after last rule)
-        writer.write_all(b"\n").expect("write trailing blank line");
-        writer.flush().expect("Failed to flush CSS writer");
+    let joined = css_rules.iter().map(|a| a.as_str()).collect::<Vec<_>>().join("\n\n");
+
+    if is_production {
+        // Production path: minify.
+        let stylesheet = StyleSheet::parse(&joined, ParserOptions::default()).expect("Failed to parse CSS");
+        let minified_css = stylesheet
+            .to_css(PrinterOptions { minify: true, ..Default::default() })
+            .expect("Failed to minify CSS");
+        let mut with_trailing = minified_css.code;
+        if !with_trailing.ends_with('\n') { with_trailing.push('\n'); }
+        with_trailing.push('\n');
+        crate::utils::write_buffered(output_path, with_trailing.as_bytes()).expect("Failed to write minified CSS");
         return;
     }
 
-    // Production path: join and minify as before.
-    let css_content = css_rules.iter().map(|a| a.as_str()).collect::<Vec<_>>().join("\n\n");
-    let stylesheet =
-        StyleSheet::parse(&css_content, ParserOptions::default()).expect("Failed to parse CSS");
-    let minified_css = stylesheet
-        .to_css(PrinterOptions {
-            minify: true,
-            ..Default::default()
-        })
-        .expect("Failed to minify CSS");
-    // Append a trailing blank line after minified output
-    let mut with_trailing = minified_css.code;
-    if !with_trailing.ends_with('\n') { with_trailing.push('\n'); }
-    with_trailing.push('\n');
-    crate::utils::write_buffered(output_path, with_trailing.as_bytes()).expect("Failed to write minified CSS");
+    if force_format {
+        // Parse & re-print without minification for deterministic formatting.
+        if let Ok(stylesheet) = StyleSheet::parse(&joined, ParserOptions::default()) {
+            if let Ok(formatted) = stylesheet.to_css(PrinterOptions { minify: false, ..Default::default() }) {
+                let mut code = formatted.code;
+                if !code.ends_with('\n') { code.push('\n'); }
+                crate::utils::write_buffered(output_path, code.as_bytes()).expect("Failed to write formatted CSS");
+                return;
+            }
+        }
+        // Fallback to raw write if parse/print fails.
+    }
+
+    // Default dev path: stream original rule order (already sorted) to disk.
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(output_path)
+        .expect("Failed to open CSS file for writing");
+    let mut writer = BufWriter::new(file);
+    for (i, rule) in css_rules.iter().enumerate() {
+        if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
+        writer.write_all(rule.as_bytes()).expect("write rule");
+    }
+    writer.write_all(b"\n").expect("write trailing newline");
+    writer.flush().expect("Failed to flush CSS writer");
 }
 
 pub fn append_new_classes_ids(

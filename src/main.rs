@@ -162,7 +162,8 @@ fn main() {
         let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames_ids.is_empty();
         if should_regen {
             let generate_start = Instant::now();
-            generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner);
+            // Initial full generation: force formatting with lightningcss for deterministic style.
+            generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner, true);
             // One-time prewarm so subsequent incremental updates are O(number of new classes) with direct Arc clones.
             style_engine.prewarm(&interner);
             let generate_duration = generate_start.elapsed();

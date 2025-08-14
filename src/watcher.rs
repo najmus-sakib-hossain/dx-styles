@@ -36,7 +36,8 @@ pub fn process_file_change(
     let mut generate_css_duration = Duration::new(0, 0);
     if removed_global > 0 {
         let generate_css_start = Instant::now();
-        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner);
+    // Full regeneration after removals: no need to force formatting (avoids unnecessary parse cost).
+    generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
         generate_css_duration = generate_css_start.elapsed();
     } else if added_global > 0 {
         let generate_css_start = Instant::now();
@@ -96,7 +97,7 @@ pub fn process_file_remove(
     let mut generate_css_duration = Duration::new(0, 0);
     if removed_global > 0 {
         let generate_css_start = Instant::now();
-        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner);
+    generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
         generate_css_duration = generate_css_start.elapsed();
     }
 
