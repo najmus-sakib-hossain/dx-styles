@@ -4,8 +4,8 @@ use std::sync::Arc;
 use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs::OpenOptions;
+use std::io::{Write, BufWriter};
 use std::path::{Path, PathBuf};
 
 #[allow(dead_code)] // Legacy string-based generation; superseded by generate_css_ids
@@ -102,8 +102,43 @@ pub fn generate_css_ids(
     let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
     sorted.sort_unstable();
     let css_rules: Vec<Arc<String>> = engine.generate_css_for_ids(&sorted, interner);
+
+    if css_rules.is_empty() {
+        crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+        return;
+    }
+
+    // Fast path for dev: stream rules to disk using a buffered writer to avoid huge intermediate allocations.
+    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
+    if !is_production {
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(output_path)
+            .expect("Failed to open CSS file for writing");
+        let mut writer = BufWriter::new(file);
+        for (i, rule) in css_rules.iter().enumerate() {
+            if i > 0 {
+                writer.write_all(b"\n\n").expect("write separator");
+            }
+            writer.write_all(rule.as_bytes()).expect("write rule");
+        }
+        writer.flush().expect("Failed to flush CSS writer");
+        return;
+    }
+
+    // Production path: join and minify as before.
     let css_content = css_rules.iter().map(|a| a.as_str()).collect::<Vec<_>>().join("\n\n");
-    fs::write(output_path, css_content).expect("Failed to write CSS file");
+    let stylesheet =
+        StyleSheet::parse(&css_content, ParserOptions::default()).expect("Failed to parse CSS");
+    let minified_css = stylesheet
+        .to_css(PrinterOptions {
+            minify: true,
+            ..Default::default()
+        })
+        .expect("Failed to minify CSS");
+    crate::utils::write_buffered(output_path, minified_css.code.as_bytes()).expect("Failed to write minified CSS");
 }
 
 pub fn append_new_classes_ids(
@@ -115,12 +150,17 @@ pub fn append_new_classes_ids(
     if new_ids.is_empty() { return; }
     let rules: Vec<Arc<String>> = engine.generate_css_for_ids(new_ids, interner);
     if rules.is_empty() { return; }
-    use std::fs::OpenOptions; use std::io::Write;
-    let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
-    let need_leading = file.metadata().map(|m| m.len()>0).unwrap_or(false);
-    let mut buf = String::new();
-    if need_leading { buf.push_str("\n\n"); }
-    for (i,r) in rules.iter().enumerate() { if i>0 { buf.push_str("\n\n"); } buf.push_str(r.as_str()); }
-    let _ = file.write_all(buf.as_bytes());
+    let file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
+    let mut writer = BufWriter::new(file);
+    // Determine if we need to put separators before first appended rule
+    let need_leading = writer.get_ref().metadata().map(|m| m.len() > 0).unwrap_or(false);
+    if need_leading {
+        writer.write_all(b"\n\n").expect("write leading separators");
+    }
+    for (i, r) in rules.iter().enumerate() {
+        if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
+        writer.write_all(r.as_bytes()).expect("write rule");
+    }
+    writer.flush().expect("flush append");
 }
 
