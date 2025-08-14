@@ -1,5 +1,45 @@
-.text-4xl {
-  font-size: 2.25rem;
+.w-full {
+  width: 100%;
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.w-screen {
+  width: 100vw;
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+
+.mt-8 {
+  margin-top: 2rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.max-w-full {
+  max-width: 100%;
 }
 
 @container (min-width: 32rem) {
@@ -8,24 +48,34 @@
   }
 }
 
-.flex {
-  display: flex;
+.container-type-inline-size {
+  container-type: inline-size;
 }
 
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
+.font-bold {
+  font-weight: 700;
+}
+
+@container (min-width: 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.text-4xl {
+  font-size: 2.25rem;
 }
 
 .resize-x {
   resize: horizontal;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.p-6 {
-  padding: 1.5rem;
 }
 
 .duration-300 {
@@ -36,65 +86,9 @@
   padding: 1rem;
 }
 
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
 @container (min-width: 24rem) {
   .\@sm\:text-xl {
     font-size: 1.25rem;
-  }
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.absolute {
-  position: absolute;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
   }
 }
 
@@ -104,18 +98,20 @@
   }
 }
 
-.rounded-lg {
-  border-radius: 0.5rem;
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
 }
 
-.w-screen {
-  width: 100vw;
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
 }
 
-.transition-all {
-  transition-property: all;
+.mt-2 {
+  margin-top: 0.5rem;
 }
 
-.p-2 {
-  padding: 0.5rem;
+.hidden {
+  display: none;
 }

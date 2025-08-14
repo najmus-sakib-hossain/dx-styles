@@ -119,11 +119,11 @@ pub fn generate_css_ids(
             .expect("Failed to open CSS file for writing");
         let mut writer = BufWriter::new(file);
         for (i, rule) in css_rules.iter().enumerate() {
-            if i > 0 {
-                writer.write_all(b"\n\n").expect("write separator");
-            }
+            if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
             writer.write_all(rule.as_bytes()).expect("write rule");
         }
+        // Ensure exactly one blank line at EOF (two newlines after last rule)
+        writer.write_all(b"\n").expect("write trailing blank line");
         writer.flush().expect("Failed to flush CSS writer");
         return;
     }
@@ -138,7 +138,11 @@ pub fn generate_css_ids(
             ..Default::default()
         })
         .expect("Failed to minify CSS");
-    crate::utils::write_buffered(output_path, minified_css.code.as_bytes()).expect("Failed to write minified CSS");
+    // Append a trailing blank line after minified output
+    let mut with_trailing = minified_css.code;
+    if !with_trailing.ends_with('\n') { with_trailing.push('\n'); }
+    with_trailing.push('\n');
+    crate::utils::write_buffered(output_path, with_trailing.as_bytes()).expect("Failed to write minified CSS");
 }
 
 pub fn append_new_classes_ids(
@@ -161,6 +165,8 @@ pub fn append_new_classes_ids(
         if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
         writer.write_all(r.as_bytes()).expect("write rule");
     }
+    // Ensure trailing blank line (two newlines at EOF). We always add even if one existed.
+    writer.write_all(b"\n\n").expect("write trailing blank line");
     writer.flush().expect("flush append");
 }
 
