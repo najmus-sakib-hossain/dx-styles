@@ -25,7 +25,6 @@ pub struct StyleEngine {
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
     css_cache: Mutex<LruCache<u32, Arc<String>>>,
-    // Optional precomputed rules indexed by interner id. Built at startup via `prewarm`.
     precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
 
@@ -101,14 +100,11 @@ impl StyleEngine {
             screens,
             states,
             container_queries,
-            // Larger cache to reduce recomputation frequency during dev hot-reloads.
             css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
             precomputed: RwLock::new(None),
         })
     }
 
-    /// Precompute CSS rules for all interned class names.
-    /// Should be called after the interner has been populated with all known names.
     #[allow(dead_code)]
     pub fn prewarm(&self, interner: &crate::interner::ClassInterner) {
         let len = interner.len();
@@ -128,23 +124,18 @@ impl StyleEngine {
         *w = Some(arc);
     }
 
-    /// Ensure the precomputed table includes all currently interned class names.
-    /// Recomputes the entire table if lengths differ or table missing.
     pub fn ensure_prewarm(&self, interner: &crate::interner::ClassInterner) {
-        // Fast read to decide path
         let current_len_opt = {
             let r = self.precomputed.read().unwrap();
             match &*r { Some(pre) => Some(pre.len()), None => None }
         };
         match current_len_opt {
             None => {
-                // No table yet; build full
                 self.prewarm(interner);
             }
             Some(existing) => {
                 let target = interner.len();
                 if target > existing {
-                    // Need to extend with new ids only
                     let mut w = self.precomputed.write().unwrap();
                     if let Some(pre_arc) = &mut *w {
                         let current_len = pre_arc.len();
@@ -162,8 +153,7 @@ impl StyleEngine {
                             }
                         }
                     } else {
-                        // Table missing after acquiring write lock (race); rebuild fully
-                        drop(w); // release before recursive
+                        drop(w);
                         self.prewarm(interner);
                     }
                 }
@@ -171,9 +161,7 @@ impl StyleEngine {
         }
     }
 
-    // Internal: compute CSS without consulting / mutating the cache (allocation-light)
     fn compute_css(&self, class_name: &str) -> Option<String> {
-        // Fast path: no prefixes
         let mut last_colon = None;
         for (i, b) in class_name.as_bytes().iter().enumerate() {
             if *b == b':' { last_colon = Some(i); }
@@ -207,7 +195,6 @@ impl StyleEngine {
 
         core_css.map(|css| {
             let mut selector = String::from(".");
-            // Escape ':' and '@'
             for ch in class_name.chars() {
                 match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
             }
@@ -217,7 +204,7 @@ impl StyleEngine {
             css_body.push_str(" {\n  ");
             css_body.push_str(&css);
             css_body.push_str(";\n}");
-            for mq in media_queries.iter().rev() { // reverse fold
+            for mq in media_queries.iter().rev() {
                 let mut wrapped = String::new();
                 wrapped.push_str(mq);
                 wrapped.push_str(" {\n");
@@ -229,17 +216,13 @@ impl StyleEngine {
         })
     }
 
-    // ID-based compute path: use interner's pre-escaped selector and avoid per-char work.
     #[allow(dead_code)]
     fn compute_css_id(&self, id: u32, interner: &crate::interner::ClassInterner) -> Option<String> {
-        // Delegate to a raw+escaped based compute function for reuse in parallel path.
         let class_name = interner.get(id);
         let esc = interner.escaped(id);
         self.compute_css_from_raw_and_escaped(class_name, esc)
     }
 
-    // Compute CSS from the original (raw) class name and its pre-escaped selector.
-    // This is safe to call from multiple threads as it only reads internal maps.
     fn compute_css_from_raw_and_escaped(&self, class_name: &str, escaped: &str) -> Option<String> {
         let last_colon = class_name.rfind(':');
         let (prefix_segment, base_class) = if let Some(idx) = last_colon {
@@ -297,23 +280,17 @@ impl StyleEngine {
         })
     }
 
-    // Batch variant: drastically reduces mutex contention by performing two short lock phases.
-    #[allow(dead_code)] // Legacy string batch path; replaced by ID-based cache path.
+    #[allow(dead_code)]
     pub fn generate_css_for_classes_batch<'a>(&self, class_names: &[&'a str]) -> Vec<String> {
-        // First lock: gather cached & identify misses
-        // Temporarily bypass u32 cache path since this function still works on &str (used on initial full pass).
-        // TODO: Remove when all callers switched to ID-based API.
         let mut out = Vec::with_capacity(class_names.len());
         for &name in class_names { if let Some(css)= self.compute_css(name) { out.push(css); } }
         out
     }
 
     pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<Arc<String>> {
-        // Fast path: ensure precomputed table (if present) covers all ids, then read directly.
         {
             let r = self.precomputed.read().unwrap();
             if r.is_some() {
-                // Determine max id requested; if beyond table length we must extend.
                 let max_id = ids.iter().copied().max();
                 if let (Some(pre), Some(max_id)) = (r.as_ref(), max_id) {
                     if (max_id as usize) >= pre.len() { drop(r); self.ensure_prewarm(interner); }
@@ -329,7 +306,6 @@ impl StyleEngine {
             return out;
         }
 
-        // Fallback: existing cache + parallel compute path.
         let mut result_slots: Vec<Option<Arc<String>>> = vec![None; ids.len()];
         let mut misses: Vec<(usize, u32)> = Vec::new();
 

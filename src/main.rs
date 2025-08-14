@@ -29,8 +29,8 @@ fn main() {
         fs::write(
             &styles_toml_path,
             r#"[static]
-            [dynamic]
-            [generators]"#,
+                [dynamic]
+                [generators]"#,
         )
         .map_err(|e| {
             eprintln!("Failed to create styles.toml: {}", e);
@@ -96,17 +96,12 @@ fn main() {
         file_classnames_ids.insert(path, id_set);
     }
 
-    // Compute initial hash of global set
-    // Track hash of global classnames to skip redundant regeneration.
-    // Removed global_hash tracking to eliminate unused assignment warnings.
-
     let scan_start = Instant::now();
     let files = utils::find_code_files(&dir);
     if !files.is_empty() {
         let file_set: HashSet<PathBuf> = files.iter().cloned().collect();
 
-        // Detect stale cached entries (files deleted since last run)
-    let stale_paths: Vec<PathBuf> = file_classnames_ids
+        let stale_paths: Vec<PathBuf> = file_classnames_ids
             .keys()
             .filter(|p| !file_set.contains(*p))
             .cloned()
@@ -117,7 +112,6 @@ fn main() {
         let mut total_added_global = 0usize;
         let mut total_removed_global = 0usize;
 
-        // Remove stale paths
         for stale in stale_paths {
             let _empty: HashSet<u32> = HashSet::new();
             let empty_ids = HashSet::new();
@@ -135,9 +129,8 @@ fn main() {
             total_removed_global += r_g;
         }
 
-        // Iterate files; skip parsing if unchanged via cache.get
         for file in files {
-            match cache.get(&file) { _ => { // treat all as potentially changed for now (simplify)
+            match cache.get(&file) { _ => {
                 let ids = parser::parse_classnames_ids(&file, &mut interner);
                 let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps_ids(
                     &file,
@@ -146,7 +139,6 @@ fn main() {
                     &mut classname_counts_ids,
                     &mut global_classnames_ids,
                 );
-                // Reconstruct string set for cache persistence
                 let mut back_to_strings: HashSet<String> = HashSet::new();
                 for id in &ids { back_to_strings.insert(interner.get(*id).to_string()); }
                 let _ = cache.set(&file, &back_to_strings);
@@ -157,14 +149,10 @@ fn main() {
             }}
         }
 
-    // Only regenerate if hash changed (covers first run as hash updates after regen path)
-
         let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames_ids.is_empty();
         if should_regen {
             let generate_start = Instant::now();
-            // Initial full generation: force formatting with lightningcss for deterministic style.
             generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner, true);
-            // One-time prewarm so subsequent incremental updates are O(number of new classes) with direct Arc clones.
             style_engine.prewarm(&interner);
             let generate_duration = generate_start.elapsed();
             let total_duration = scan_start.elapsed();
@@ -246,4 +234,3 @@ fn main() {
         }
     }
 }
-

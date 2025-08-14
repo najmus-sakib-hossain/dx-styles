@@ -1,17 +1,5 @@
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
+.text-lg {
+  font-size: 1.125rem;
 }
 
 @container (min-width: 32rem) {
@@ -20,32 +8,38 @@
   }
 }
 
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
+.w-screen {
+  width: 100vw;
 }
 
-.text-lg {
-  font-size: 1.125rem;
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.mt-8 {
+  margin-top: 2rem;
 }
 
 .text-4xl {
   font-size: 2.25rem;
 }
 
-.font-bold {
-  font-weight: 700;
+.border-dashed {
+  border-style: dashed;
 }
 
-.flex {
-  display: flex;
-}
-
-.w-screen {
-  width: 100vw;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
+.w-full {
+  width: 100%;
 }
 
 .rounded-lg {
@@ -58,10 +52,8 @@
   }
 }
 
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
+.resize-x {
+  resize: horizontal;
 }
 
 @media (min-width: 768px) {
@@ -70,48 +62,56 @@
   }
 }
 
-.border-dashed {
-  border-style: dashed;
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
 }
 
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.transition-all {
-  transition-property: all;
+.duration-300 {
+  transition-duration: 300ms;
 }
 
 .absolute {
   position: absolute;
 }
 
-.overflow-auto {
-  overflow: auto;
-}
-
-.w-full {
-  width: 100%;
+.font-bold {
+  font-weight: 700;
 }
 
 .max-w-full {
   max-width: 100%;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+@container (min-width: 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.hidden {
+  display: none;
 }
