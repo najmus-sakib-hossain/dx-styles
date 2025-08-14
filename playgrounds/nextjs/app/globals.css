@@ -1,77 +1,5 @@
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
-}
-
-@container (min-width: 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
-  }
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-@container (min-width: 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
+.overflow-auto {
+  overflow: auto;
 }
 
 @media (min-width: 768px) {
@@ -80,26 +8,102 @@
   }
 }
 
-.overflow-auto {
-  overflow: auto;
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
 }
 
-.p-4 {
-  padding: 1rem;
+@container (min-width: 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.max-w-5xl {
+  max-width: 64rem;
 }
 
 .text-4xl {
   font-size: 2.25rem;
 }
 
-.w-full {
-  width: 100%;
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.p-5 {
+  padding: 1.25rem;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+
+@container (min-width: 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+
+.duration-300 {
+  transition-duration: 300ms;
 }
 
 .text-lg {
   font-size: 1.125rem;
 }
 
+@container (min-width: 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
+}
+
 .mt-8 {
   margin-top: 2rem;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.transition-all {
+  transition-property: all;
 }
