@@ -1,6 +1,13 @@
 # Dx
 Enhance Developer Experience
 
+```bash
+sudo apt-get update && sudo apt-get install -y build-essential pkg-config curl git cmake
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+sudo apt-get install -y flatbuffers-compiler
+```
+
 Good, update this page.tsx so that I can use container queries of our dx-styles and test our dx-styles using this page.tsx file
 
 ```page.tsx

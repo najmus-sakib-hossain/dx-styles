@@ -5,16 +5,15 @@
     pkgs.rustup
     pkgs.flatbuffers
     pkgs.bun
-    pkgs.pnpm
     pkgs.tree
   ];
   env = { };
   idx = {
     extensions = [
       "pkief.material-icon-theme"
-      "ziglang.vscode-zig"
       "tamasfe.even-better-toml"
       "rust-lang.rust-analyzer"
+      "bradlc.vscode-tailwindcss"
     ];
     workspace = {
       onCreate = {
