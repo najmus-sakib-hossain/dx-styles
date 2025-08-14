@@ -1,13 +1,43 @@
-.hidden {
-  display: none;
+.container-type-inline-size {
+  container-type: inline-size;
 }
 
-.mt-2 {
-  margin-top: .5rem;
+.mt-8 {
+  margin-top: 2rem;
 }
 
-.p-6 {
-  padding: 1.5rem;
+.min-h-screen {
+  min-height: 100vh;
+}
+
+@media (width >= 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
+  }
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.w-screen {
+  width: 100vw;
+}
+
+.rounded-lg {
+  border-radius: .5rem;
+}
+
+@container (width >= 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+@media (width >= 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
 }
 
 @container (width >= 24rem) {
@@ -20,98 +50,68 @@
   font-size: 1.125rem;
 }
 
-@container (width >= 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.p-4 {
-  padding: 1rem;
+.max-w-5xl {
+  max-width: 64rem;
 }
 
 .transition-all {
   transition-property: all;
 }
 
-@container (width >= 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
-}
-
-@media (width >= 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
-  }
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.absolute {
-  position: absolute;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.duration-300 {
-  transition-duration: .3s;
-}
-
-@media (width >= 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
 .hover\:mt-5:hover {
   margin-top: 1.25rem;
+}
+
+.p-6 {
+  padding: 1.5rem;
 }
 
 .w-full {
   width: 100%;
 }
 
-.w-screen {
-  width: 100vw;
+.p-4 {
+  padding: 1rem;
 }
 
-.min-h-screen {
-  min-height: 100vh;
+.absolute {
+  position: absolute;
 }
 
-.rounded-lg {
-  border-radius: .5rem;
+.resize-x {
+  resize: horizontal;
 }
 
-.mt-8 {
-  margin-top: 2rem;
+.flex {
+  display: flex;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-4xl {
+  font-size: 2.25rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.duration-300 {
+  transition-duration: .3s;
+}
+
+.mt-2 {
+  margin-top: .5rem;
+}
+
+@container (width >= 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
 }
