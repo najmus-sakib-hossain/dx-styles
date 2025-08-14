@@ -18,6 +18,8 @@ struct TomlConfig {
     states: HashMap<String, String>,
     #[serde(default)]
     container_queries: HashMap<String, String>,
+    #[serde(default)]
+    colors: HashMap<String, String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -150,12 +152,25 @@ fn main() {
         cq_offsets.push(cq_offset);
     }
 
+    // Colors
+    let mut color_offsets = Vec::new();
+    for (name, value) in toml_data.colors {
+        let name_offset = builder.create_string(&name);
+        let value_offset = builder.create_string(&value);
+        let table_wip = builder.start_table();
+        builder.push_slot(4, name_offset, WIPOffset::new(0));
+        builder.push_slot(6, value_offset, WIPOffset::new(0));
+        let color_offset = builder.end_table(table_wip);
+        color_offsets.push(color_offset);
+    }
+
     let styles_vec = builder.create_vector(&style_offsets);
     let dynamic_vec = builder.create_vector(&dynamic_offsets);
     let generators_vec = builder.create_vector(&generator_offsets);
     let screens_vec = builder.create_vector(&screen_offsets);
     let states_vec = builder.create_vector(&state_offsets);
     let cq_vec = builder.create_vector(&cq_offsets);
+    let colors_vec = builder.create_vector(&color_offsets);
 
     let table_wip = builder.start_table();
     builder.push_slot(4, styles_vec, WIPOffset::new(0));
@@ -164,6 +179,7 @@ fn main() {
     builder.push_slot(10, screens_vec, WIPOffset::new(0));
     builder.push_slot(12, states_vec, WIPOffset::new(0));
     builder.push_slot(14, cq_vec, WIPOffset::new(0));
+    builder.push_slot(16, colors_vec, WIPOffset::new(0));
     let config_root = builder.end_table(table_wip);
 
     builder.finish(config_root, None);

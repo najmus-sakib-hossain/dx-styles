@@ -1,13 +1,9 @@
-.container-type-inline-size {
-  container-type: inline-size;
+.bg-gray-50 {
+  background-color: oklch(98.5% .002 247.839);
 }
 
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.min-h-screen {
-  min-height: 100vh;
+.text-gray-600 {
+  color: oklch(44.6% .03 256.802);
 }
 
 @media (width >= 768px) {
@@ -16,21 +12,13 @@
   }
 }
 
-.max-w-full {
-  max-width: 100%;
-}
-
-.w-screen {
-  width: 100vw;
-}
-
-.rounded-lg {
-  border-radius: .5rem;
+.flex {
+  display: flex;
 }
 
 @container (width >= 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
+  .\@2xl\:bg-red-300 {
+    background-color: oklch(80.8% .114 19.571);
   }
 }
 
@@ -40,70 +28,32 @@
   }
 }
 
-@container (width >= 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
+@container (width >= 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
   }
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.absolute {
-  position: absolute;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.flex {
-  display: flex;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-.font-bold {
-  font-weight: 700;
 }
 
 .text-4xl {
   font-size: 2.25rem;
 }
 
-.border-dashed {
-  border-style: dashed;
+.min-h-screen {
+  min-height: 100vh;
 }
 
-.duration-300 {
-  transition-duration: .3s;
+.text-blue-900 {
+  color: oklch(37.9% .146 265.522);
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+@container (width >= 32rem) {
+  .\@lg\:bg-yellow-300 {
+    background-color: oklch(90.5% .182 98.111);
+  }
 }
 
 .mt-2 {
@@ -114,4 +64,110 @@
   .\@lg\:text-2xl {
     font-size: 1.5rem;
   }
+}
+
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+@container (width >= 42rem) {
+  .\@2xl\:text-red-900 {
+    color: oklch(39.6% .141 25.723);
+  }
+}
+
+.rounded-lg {
+  border-radius: .5rem;
+}
+
+.bg-blue-300 {
+  background-color: oklch(80.9% .105 251.813);
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+@container (width >= 24rem) {
+  .\@sm\:bg-green-300 {
+    background-color: oklch(87.1% .15 154.449);
+  }
+}
+
+.text-gray-800 {
+  color: oklch(27.8% .033 256.848);
+}
+
+@container (width >= 32rem) {
+  .\@lg\:text-yellow-900 {
+    color: oklch(42.1% .095 57.708);
+  }
+}
+
+@container (width >= 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+@container (width >= 24rem) {
+  .\@sm\:text-green-900 {
+    color: oklch(39.3% .095 152.535);
+  }
+}
+
+.duration-300 {
+  transition-duration: .3s;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.mt-8 {
+  margin-top: 2rem;
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.w-screen {
+  width: 100vw;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.transition-all {
+  transition-property: all;
 }

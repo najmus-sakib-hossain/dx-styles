@@ -24,6 +24,7 @@ pub struct StyleEngine {
     screens: HashMap<String, String>,
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
+    colors: HashMap<String, String>,
     css_cache: Mutex<LruCache<u32, Arc<String>>>,
     precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
@@ -94,12 +95,19 @@ impl StyleEngine {
                     .collect()
             });
 
+        let colors = config.colors().map_or_else(HashMap::new, |c| {
+            c.iter()
+                .map(|color| (color.name().to_string(), color.value().to_string()))
+                .collect()
+        });
+
         Ok(Self {
             precompiled,
             buffer,
             screens,
             states,
             container_queries,
+            colors,
             css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
             precomputed: RwLock::new(None),
         })
@@ -191,6 +199,7 @@ impl StyleEngine {
             .precompiled
             .get(base_class)
             .cloned()
+            .or_else(|| self.generate_color_css(base_class))
             .or_else(|| self.generate_dynamic_css(base_class));
 
         core_css.map(|css| {
@@ -250,6 +259,7 @@ impl StyleEngine {
             .precompiled
             .get(base_class)
             .cloned()
+            .or_else(|| self.generate_color_css(base_class))
             .or_else(|| self.generate_dynamic_css(base_class));
 
         core_css.map(|css| {
@@ -380,6 +390,17 @@ impl StyleEngine {
             }
         }
 
+        None
+    }
+
+    // Generate color utilities bg-* and text-* from colors table
+    fn generate_color_css(&self, class_name: &str) -> Option<String> {
+        if let Some(name) = class_name.strip_prefix("bg-") {
+            if let Some(val) = self.colors.get(name) { return Some(format!("background-color: {}", val)); }
+        }
+        if let Some(name) = class_name.strip_prefix("text-") {
+            if let Some(val) = self.colors.get(name) { return Some(format!("color: {}", val)); }
+        }
         None
     }
 }

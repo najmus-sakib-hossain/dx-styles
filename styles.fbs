@@ -38,6 +38,12 @@ table ContainerQuery {
     value: string (required);
 }
 
+// New color tokens table. Each color has a name and a value (e.g. hex, rgb(), hsl()).
+table Color {
+  name: string (key, required);
+  value: string (required);
+}
+
 table Config {
   styles: [Style];
   generators: [Generator];
@@ -45,6 +51,7 @@ table Config {
   screens: [Screen];
   states: [State];
   container_queries: [ContainerQuery];
+  colors: [Color]; // Added in schema v2
 }
 
 root_type Config;
