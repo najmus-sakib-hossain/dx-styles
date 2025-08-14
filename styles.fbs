@@ -44,6 +44,14 @@ table Color {
   value: string (required);
 }
 
+// Animation generator templates describe how to expand animation-related
+// utility classes into CSS. Templates can include placeholders like:
+// {hash}, {value1}, {value2}, {rules}, {perc}
+table AnimationGenerator {
+  name: string (key, required);
+  template: string (required);
+}
+
 table Config {
   styles: [Style];
   generators: [Generator];
@@ -52,6 +60,7 @@ table Config {
   states: [State];
   container_queries: [ContainerQuery];
   colors: [Color]; // Added in schema v2
+  animation_generators: [AnimationGenerator]; // Added in schema v3
 }
 
 root_type Config;

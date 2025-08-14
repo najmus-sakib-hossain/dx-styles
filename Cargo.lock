@@ -371,6 +371,7 @@ dependencies = [
  "oxc_span",
  "rayon",
  "rkyv 0.8.11",
+ "seahash",
  "serde",
  "sled",
  "smallvec",

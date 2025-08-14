@@ -25,6 +25,7 @@ pub struct StyleEngine {
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
     colors: HashMap<String, String>,
+    animation_templates: HashMap<String, String>,
     css_cache: Mutex<LruCache<u32, Arc<String>>>,
     precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
@@ -101,6 +102,12 @@ impl StyleEngine {
                 .collect()
         });
 
+        let animation_templates = config.animation_generators().map_or_else(HashMap::new, |a| {
+            a.iter()
+                .map(|ag| (ag.name().to_string(), ag.template().to_string()))
+                .collect()
+        });
+
         Ok(Self {
             precompiled,
             buffer,
@@ -108,6 +115,7 @@ impl StyleEngine {
             states,
             container_queries,
             colors,
+            animation_templates,
             css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
             precomputed: RwLock::new(None),
         })
@@ -200,6 +208,7 @@ impl StyleEngine {
             .get(base_class)
             .cloned()
             .or_else(|| self.generate_color_css(base_class))
+            .or_else(|| self.generate_animation_css(class_name))
             .or_else(|| self.generate_dynamic_css(base_class));
 
         core_css.map(|css| {
@@ -260,6 +269,7 @@ impl StyleEngine {
             .get(base_class)
             .cloned()
             .or_else(|| self.generate_color_css(base_class))
+            .or_else(|| self.generate_animation_css(class_name))
             .or_else(|| self.generate_dynamic_css(base_class));
 
         core_css.map(|css| {
@@ -400,6 +410,32 @@ impl StyleEngine {
         }
         if let Some(name) = class_name.strip_prefix("text-") {
             if let Some(val) = self.colors.get(name) { return Some(format!("color: {}", val)); }
+        }
+        None
+    }
+
+    // Parse animation sentence utilities. This is an initial minimal implementation:
+    // animate:duration[:delay] + optional from:/to:/via: pieces.
+    fn generate_animation_css(&self, full_class: &str) -> Option<String> {
+        if !full_class.contains("animate:") { return None; }
+        // Split on spaces not present in a single class (classes are single tokens). We only process the animate:* token here.
+        // Pattern: [state prefixes already handled]:animate:dur[:delay]
+        let parts: Vec<&str> = full_class.split(':').collect();
+        // find "animate" position
+        let pos = parts.iter().position(|p| *p == "animate")?;
+        // duration in next segment if exists
+        let duration = parts.get(pos + 1).unwrap_or(&"1s");
+        let mut delay = "0s";
+        if let Some(next) = parts.get(pos + 2) {
+            if next.ends_with("ms") || next.ends_with('s') { delay = next; }
+        }
+        // Basic hash (poor mans) - could hash the class string
+        let hash = format!("{:x}", seahash::hash(full_class.as_bytes()));
+        if let Some(tpl) = self.animation_templates.get("animate") {
+            let out = tpl.replace("{hash}", &hash)
+                .replace("{value1|1s}", duration)
+                .replace("{value2|0s}", delay);
+            return Some(out.trim_end_matches(';').to_string());
         }
         None
     }
