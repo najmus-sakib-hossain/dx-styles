@@ -77,9 +77,10 @@ pub fn append_new_classes(
     let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
     let estimated: usize = rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
     let mut buffer = String::with_capacity(estimated);
-    if need_leading { buffer.push_str("\n\n"); }
+    // Ensure at most one blank line separation from existing content.
+    if need_leading { buffer.push('\n'); }
     for (i, rule) in rules.iter().enumerate() {
-        if i > 0 { buffer.push_str("\n\n"); }
+    if i > 0 { buffer.push_str("\n\n"); } // keep single blank line between new rules themselves
         buffer.push_str(rule);
     }
     let _ = file.write_all(buffer.as_bytes());
@@ -154,13 +155,11 @@ pub fn append_new_classes_ids(
     let file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
     let mut writer = BufWriter::new(file);
     let need_leading = writer.get_ref().metadata().map(|m| m.len() > 0).unwrap_or(false);
-    if need_leading {
-        writer.write_all(b"\n\n").expect("write leading separators");
-    }
+    if need_leading { writer.write_all(b"\n").expect("write leading separator"); }
     for (i, r) in rules.iter().enumerate() {
         if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
         writer.write_all(r.as_bytes()).expect("write rule");
     }
-    writer.write_all(b"\n\n").expect("write trailing blank line");
+    writer.write_all(b"\n").expect("write trailing newline");
     writer.flush().expect("flush append");
 }
