@@ -6,6 +6,7 @@ mod parser;
 mod utils;
 mod watcher;
 mod interner;
+mod composites;
 
 use crate::cache::ClassnameCache;
 use colored::Colorize;

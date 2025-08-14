@@ -4,7 +4,8 @@ use oxc_ast::ast::{
 };
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use crate::composites;
 use crate::interner::ClassInterner;
 use std::fs;
 use std::path::Path;
@@ -23,6 +24,7 @@ pub fn parse_classnames(path: &Path) -> HashSet<String> {
 
     let mut visitor = ClassNameVisitor {
         class_names: HashSet::new(),
+        components: HashMap::new(),
     };
     visitor.visit_program(&ret.program);
     visitor.class_names
@@ -35,6 +37,104 @@ pub fn parse_classnames_ids(path: &Path, interner: &mut ClassInterner) -> HashSe
 
 struct ClassNameVisitor {
     class_names: HashSet<String>,
+    components: HashMap<String, Vec<String>>, // component name -> utilities
+}
+
+impl ClassNameVisitor {
+    // Expand grouping syntax inside a single class attribute string.
+    // Supported forms:
+    // 1. prefix(a b c) where prefix is a screen, state, or container query -> prefix:a prefix:b ...
+    // 2. componentName(a b c) defines a component (first definition wins) and expands to its utilities.
+    // 3. +componentName(a b c) additive override: expands base component utilities + provided ones.
+    // 4. -componentName(p m) subtractive override: removes any base utilities starting with listed prefixes.
+    // 5. Plain componentName token (no parentheses) expands to its utilities if previously defined.
+    fn expand_grouping(&mut self, raw: &str) -> Vec<String> {
+        // Static sets (could be generated from config, hardcoded for now)
+        // Note: keep in sync with styles.toml if updated.
+        const SCREENS: &[&str] = &["xs","sm","md","lg","xl","2xl"];
+        const STATES: &[&str] = &[
+            "hover","focus","focus-within","focus-visible","active","visited","disabled","checked","first","last","odd","even","required","optional","valid","invalid","read-only","before","after","placeholder","file","marker","selection","group-hover","group-focus","group-active","group-visited","peer-checked","peer-focus","peer-active","peer-hover","empty","target"
+        ];
+        const CQS: &[&str] = &["@xs","@sm","@md","@lg","@xl","@2xl","@3xl","@4xl","@5xl","@6xl","@7xl","@8xl","@9xl"];
+        let screens: HashSet<&str> = SCREENS.iter().copied().collect();
+        let states: HashSet<&str> = STATES.iter().copied().collect();
+        let cqs: HashSet<&str> = CQS.iter().copied().collect();
+
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        let bytes = raw.as_bytes();
+        while i < bytes.len() {
+            // skip whitespace
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
+            if i >= bytes.len() { break; }
+            // read ident (allow + - @ letters digits _ -)
+            let start = i;
+            while i < bytes.len() {
+                let c = bytes[i] as char;
+                if c == '(' || c.is_ascii_whitespace() { break; }
+                i += 1;
+            }
+            let ident = &raw[start..i];
+            // group or plain?
+            if i < bytes.len() && bytes[i] as char == '(' {
+                // find matching ')'
+                i += 1; // skip '('
+                let inner_start = i;
+                let mut depth = 1;
+                while i < bytes.len() && depth > 0 {
+                    let c = bytes[i] as char;
+                    if c == '(' { depth += 1; }
+                    else if c == ')' { depth -= 1; }
+                    i += 1;
+                }
+                let inner_end = i.saturating_sub(1);
+                let inner = &raw[inner_start..inner_end];
+                // split inner by whitespace into utilities/prefix filters
+                let inner_tokens: Vec<String> = inner.split_whitespace().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
+                if ident.starts_with('+') || ident.starts_with('-') {
+                    // Variant path: build final token list then collapse to composite class.
+                    let additive = ident.starts_with('+');
+                    let cname = ident.trim_start_matches(|c| c == '+' || c == '-');
+                    let mut tokens: Vec<String> = Vec::new();
+                    if let Some(base) = self.components.get(cname) { tokens.extend(base.iter().cloned()); }
+                    if additive {
+                        tokens.extend(inner_tokens.into_iter());
+                    } else { // subtractive: treat provided as prefixes to remove
+                        let filters = inner_tokens;
+                        let mut filtered: Vec<String> = Vec::new();
+                        'tok: for t in tokens.into_iter() {
+                            for f in &filters { if t.starts_with(f) { continue 'tok; } }
+                            filtered.push(t);
+                        }
+                        tokens = filtered;
+                    }
+                    // Hash and register composite
+                    if !tokens.is_empty() {
+                        let composite_class = composites::get_or_create(&tokens);
+                        out.push(composite_class);
+                    }
+                } else if screens.contains(ident) || states.contains(ident) || cqs.contains(ident) {
+                    for token in inner_tokens { out.push(format!("{}:{}", ident, token)); }
+                } else {
+                    // component definition
+                    if !self.components.contains_key(ident) {
+                        self.components.insert(ident.to_string(), inner_tokens.clone());
+                    }
+                    // expand for this element
+                    if let Some(list) = self.components.get(ident) { out.extend(list.iter().cloned()); }
+                }
+            } else {
+                // plain token
+                if let Some(list) = self.components.get(ident) {
+                    // component usage expansion
+                    out.extend(list.iter().cloned());
+                } else {
+                    out.push(ident.to_string());
+                }
+            }
+        }
+        out
+    }
 }
 
 impl ClassNameVisitor {
@@ -173,9 +273,8 @@ impl ClassNameVisitor {
                 if let ast::JSXAttributeName::Identifier(ident) = &attr.name {
                     if ident.name == "className" {
                         if let Some(ast::JSXAttributeValue::StringLiteral(lit)) = &attr.value {
-                            lit.value.split_whitespace().for_each(|cn| {
-                                self.class_names.insert(cn.to_string());
-                            });
+                            let expanded = self.expand_grouping(&lit.value);
+                            for cn in expanded { self.class_names.insert(cn); }
                         }
                     }
                 }

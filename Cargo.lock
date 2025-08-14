@@ -365,6 +365,7 @@ dependencies = [
  "memmap2",
  "notify",
  "notify-debouncer-full",
+ "once_cell",
  "oxc_allocator",
  "oxc_ast",
  "oxc_parser",

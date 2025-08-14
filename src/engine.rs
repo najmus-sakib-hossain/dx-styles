@@ -17,6 +17,7 @@ mod styles_generated {
     include!(concat!(env!("OUT_DIR"), "/styles_generated.rs"));
 }
 use styles_generated::style_schema;
+use crate::composites;
 
 pub struct StyleEngine {
     precompiled: HashMap<String, String>,
@@ -209,7 +210,8 @@ impl StyleEngine {
             .cloned()
             .or_else(|| self.generate_color_css(base_class))
             .or_else(|| self.generate_animation_css(class_name))
-            .or_else(|| self.generate_dynamic_css(base_class));
+            .or_else(|| self.generate_dynamic_css(base_class))
+            .or_else(|| self.expand_composite(base_class));
 
         core_css.map(|css| {
             let mut selector = String::from(".");
@@ -270,7 +272,8 @@ impl StyleEngine {
             .cloned()
             .or_else(|| self.generate_color_css(base_class))
             .or_else(|| self.generate_animation_css(class_name))
-            .or_else(|| self.generate_dynamic_css(base_class));
+            .or_else(|| self.generate_dynamic_css(base_class))
+            .or_else(|| self.expand_composite(base_class));
 
         core_css.map(|css| {
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
@@ -298,6 +301,39 @@ impl StyleEngine {
             }
             css_body
         })
+    }
+
+    fn expand_composite(&self, class_name: &str) -> Option<String> {
+        // Composite classes start with dx-c-
+        if !class_name.starts_with("dx-c-") { return None; }
+        // Retrieve tokens
+        let pairs = composites::iter_pairs();
+        for (cname, tokens) in pairs {
+            if cname == class_name {
+                // Build merged declarations concatenated by semicolons (each utility will itself expand separately; we re-query engine for each token)
+                let mut decls: Vec<String> = Vec::new();
+                for t in tokens {
+                    if let Some(rule) = self.precompiled.get(&t) {
+                        decls.push(rule.clone());
+                    } else if let Some(c) = self.generate_color_css(&t) {
+                        decls.push(c);
+                    } else if let Some(d) = self.generate_dynamic_css(&t) {
+                        decls.push(d);
+                    }
+                }
+                if decls.is_empty() { return None; }
+                // Join while stripping trailing semicolons to avoid duplication
+                let mut merged = String::new();
+                for (i, d) in decls.iter().enumerate() {
+                    let trimmed = d.trim_end_matches(';');
+                    if i > 0 { merged.push(' '); }
+                    merged.push_str(trimmed);
+                    merged.push(';');
+                }
+                return Some(merged);
+            }
+        }
+        None
     }
 
     #[allow(dead_code)]

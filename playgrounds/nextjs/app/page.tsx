@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <main className="animate:1s from:opacity-0 to:opacity-100 forwards hidden p-4 md:p-8 bg-gray-50 min-h-screen text-gray-800 w-screen absolute">
+    <main className="hover(bg-red-500 text-yellow-500) animate:1s from:opacity-0 to:opacity-100 forwards hidden p-4 md:p-8 bg-gray-50 min-h-screen text-gray-800 w-screen absolute">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-4xl md:text-5xl font-bold">
           Dx Styles Container Queries

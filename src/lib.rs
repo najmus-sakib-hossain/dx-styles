@@ -7,6 +7,7 @@ pub mod utils;
 pub mod watcher;
 pub mod interner;
 pub mod io;
+pub mod composites;
 
 pub use engine::StyleEngine;
 pub use interner::ClassInterner;
