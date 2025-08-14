@@ -22,7 +22,7 @@ pub struct StyleEngine {
     screens: HashMap<String, String>,
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
-    css_cache: Mutex<LruCache<String, String>>,
+    css_cache: Mutex<LruCache<u32, String>>,
 }
 
 impl StyleEngine {
@@ -161,47 +161,32 @@ impl StyleEngine {
     }
 
     // Batch variant: drastically reduces mutex contention by performing two short lock phases.
+    #[allow(dead_code)] // Legacy string batch path; replaced by ID-based cache path.
     pub fn generate_css_for_classes_batch<'a>(&self, class_names: &[&'a str]) -> Vec<String> {
         // First lock: gather cached & identify misses
+        // Temporarily bypass u32 cache path since this function still works on &str (used on initial full pass).
+        // TODO: Remove when all callers switched to ID-based API.
+        let mut out = Vec::with_capacity(class_names.len());
+        for &name in class_names { if let Some(css)= self.compute_css(name) { out.push(css); } }
+        out
+    }
+
+    pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<String> {
         let mut cache = self.css_cache.lock().unwrap();
-        let mut results: Vec<(usize, String)> = Vec::with_capacity(class_names.len());
-        let mut misses: Vec<(usize, &str)> = Vec::new();
-        for (idx, &name) in class_names.iter().enumerate() {
-            if let Some(c) = cache.get(name) {
-                results.push((idx, c.clone()));
-            } else {
-                misses.push((idx, name));
-            }
+        let mut results: Vec<(usize, String)> = Vec::with_capacity(ids.len());
+        let mut misses: Vec<(usize, u32)> = Vec::new();
+        for (idx, &id) in ids.iter().enumerate() {
+            if let Some(c) = cache.get(&id) { results.push((idx, c.clone())); } else { misses.push((idx, id)); }
         }
-        drop(cache); // release early
-
+        drop(cache);
         if !misses.is_empty() {
-            // Compute misses (currently sequential; could parallelize if large)
-            // Threshold chosen to avoid rayon overhead for small batches.
-            let parallel = misses.len() > 256; // heuristic
-            let mut computed: Vec<(usize, String)> = if parallel {
-                use rayon::prelude::*;
-                misses
-                    .par_iter()
-                    .filter_map(|(idx, name)| self.compute_css(name).map(|c| (*idx, c)))
-                    .collect()
-            } else {
-                misses
-                    .into_iter()
-                    .filter_map(|(idx, name)| self.compute_css(name).map(|c| (idx, c)))
-                    .collect()
-            };
-
-            // Second lock: insert into cache
+            let mut computed: Vec<(usize, String)> = Vec::with_capacity(misses.len());
+            for (idx, id) in misses { if let Some(css)= self.compute_css(interner.get(id)) { computed.push((idx, css)); } }
             let mut cache = self.css_cache.lock().unwrap();
-            for (idx, css) in &computed {
-                cache.put(class_names[*idx].to_string(), css.clone());
-            }
-            results.append(&mut computed);
+            for (idx, css) in &computed { cache.put(ids[*idx], css.clone()); }
+            results.extend(computed);
         }
-
-        // Re-order to original order of class_names
-        results.sort_unstable_by_key(|(idx, _)| *idx);
+        results.sort_unstable_by_key(|(i, _)| *i);
         results.into_iter().map(|(_, css)| css).collect()
     }
 

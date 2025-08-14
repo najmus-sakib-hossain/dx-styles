@@ -5,6 +5,7 @@ use oxc_ast::ast::{
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 use std::collections::HashSet;
+use crate::interner::ClassInterner;
 use std::fs;
 use std::path::Path;
 
@@ -25,6 +26,11 @@ pub fn parse_classnames(path: &Path) -> HashSet<String> {
     };
     visitor.visit_program(&ret.program);
     visitor.class_names
+}
+
+pub fn parse_classnames_ids(path: &Path, interner: &mut ClassInterner) -> HashSet<u32> {
+    let raw = parse_classnames(path);
+    raw.into_iter().map(|s| interner.intern(&s)).collect()
 }
 
 struct ClassNameVisitor {

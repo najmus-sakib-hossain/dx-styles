@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)] // Legacy string-based API retained temporarily for reference; prefer *_ids variant.
 pub fn update_class_maps(
     path: &Path,
     new_classnames: &HashSet<String>,
@@ -46,5 +47,52 @@ pub fn update_class_maps(
         removed_in_global,
         added_global_names,
         removed_global_names,
+    )
+}
+
+// ID-based variant (u32) used after interning migration.
+pub fn update_class_maps_ids(
+    path: &Path,
+    new_ids: &HashSet<u32>,
+    file_ids: &mut HashMap<PathBuf, HashSet<u32>>,
+    id_counts: &mut HashMap<u32, u32>,
+    global_ids: &mut HashSet<u32>,
+) -> (usize, usize, usize, usize, Vec<u32>, Vec<u32>) {
+    let old_ids = file_ids.get(path).cloned().unwrap_or_default();
+    let added_in_file: HashSet<_> = new_ids.difference(&old_ids).cloned().collect();
+    let removed_in_file: HashSet<_> = old_ids.difference(new_ids).cloned().collect();
+
+    let mut added_global = 0;
+    let mut removed_global = 0;
+    let mut added_global_vec = Vec::new();
+    let mut removed_global_vec = Vec::new();
+
+    for id in &removed_in_file {
+        if let Some(c) = id_counts.get_mut(id) {
+            *c -= 1;
+            if *c == 0 {
+                global_ids.remove(id);
+                removed_global += 1;
+                removed_global_vec.push(*id);
+            }
+        }
+    }
+    for id in &added_in_file {
+        let count = id_counts.entry(*id).or_insert(0);
+        if *count == 0 {
+            global_ids.insert(*id);
+            added_global += 1;
+            added_global_vec.push(*id);
+        }
+        *count += 1;
+    }
+    file_ids.insert(path.to_path_buf(), new_ids.clone());
+    (
+        added_in_file.len(),
+        removed_in_file.len(),
+        added_global,
+        removed_global,
+        added_global_vec,
+        removed_global_vec,
     )
 }

@@ -1,4 +1,5 @@
 use crate::engine::StyleEngine;
+use crate::interner::ClassInterner;
 use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -6,6 +7,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)] // Legacy string-based generation; superseded by generate_css_ids
 pub fn generate_css(
     class_names: &HashSet<String>,
     output_path: &Path,
@@ -59,6 +61,7 @@ pub fn generate_css(
 
 // Extremely fast incremental appender: assumes only new classes (no removals) were added.
 // Appends rules in insertion order (not globally sorted) for minimal work.
+#[allow(dead_code)] // Legacy string-based incremental append; superseded by append_new_classes_ids
 pub fn append_new_classes(
     new_classes: &[String],
     output_path: &Path,
@@ -86,5 +89,37 @@ pub fn append_new_classes(
         buffer.push_str(rule);
     }
     let _ = file.write_all(buffer.as_bytes());
+}
+
+// ID-based full generation (after migration complete)
+pub fn generate_css_ids(
+    class_ids: &HashSet<u32>,
+    output_path: &Path,
+    engine: &StyleEngine,
+    interner: &ClassInterner,
+) {
+    let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
+    sorted.sort_unstable();
+    let css_rules = engine.generate_css_for_ids(&sorted, interner);
+    let css_content = css_rules.join("\n\n");
+    fs::write(output_path, css_content).expect("Failed to write CSS file");
+}
+
+pub fn append_new_classes_ids(
+    new_ids: &[u32],
+    output_path: &Path,
+    engine: &StyleEngine,
+    interner: &ClassInterner,
+) {
+    if new_ids.is_empty() { return; }
+    let rules = engine.generate_css_for_ids(new_ids, interner);
+    if rules.is_empty() { return; }
+    use std::fs::OpenOptions; use std::io::Write;
+    let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
+    let need_leading = file.metadata().map(|m| m.len()>0).unwrap_or(false);
+    let mut buf = String::new();
+    if need_leading { buf.push_str("\n\n"); }
+    for (i,r) in rules.iter().enumerate() { if i>0 { buf.push_str("\n\n"); } buf.push_str(r); }
+    let _ = file.write_all(buf.as_bytes());
 }
 

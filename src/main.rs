@@ -5,6 +5,7 @@ mod generator;
 mod parser;
 mod utils;
 mod watcher;
+mod interner;
 
 use crate::cache::ClassnameCache;
 use colored::Colorize;
@@ -75,16 +76,20 @@ fn main() {
     };
     let dir = PathBuf::from("playgrounds/nextjs");
 
-    let mut file_classnames: HashMap<PathBuf, HashSet<String>> = HashMap::new();
-    let mut classname_counts: HashMap<String, u32> = HashMap::new();
-    let mut global_classnames: HashSet<String> = HashSet::new();
+    let mut interner = interner::ClassInterner::new();
+    let mut file_classnames_ids: HashMap<PathBuf, HashSet<u32>> = HashMap::new();
+    let mut classname_counts_ids: HashMap<u32, u32> = HashMap::new();
+    let mut global_classnames_ids: HashSet<u32> = HashSet::new();
 
     for (path, fc) in cache.iter() {
-        file_classnames.insert(path, fc.classnames.clone());
+        let mut id_set = HashSet::new();
         for cn in &fc.classnames {
-            *classname_counts.entry(cn.clone()).or_insert(0) += 1;
-            global_classnames.insert(cn.clone());
+            let id = interner.intern(cn);
+            id_set.insert(id);
+            *classname_counts_ids.entry(id).or_insert(0) += 1;
+            global_classnames_ids.insert(id);
         }
+        file_classnames_ids.insert(path, id_set);
     }
 
     // Compute initial hash of global set
@@ -97,7 +102,7 @@ fn main() {
         let file_set: HashSet<PathBuf> = files.iter().cloned().collect();
 
         // Detect stale cached entries (files deleted since last run)
-        let stale_paths: Vec<PathBuf> = file_classnames
+    let stale_paths: Vec<PathBuf> = file_classnames_ids
             .keys()
             .filter(|p| !file_set.contains(*p))
             .cloned()
@@ -110,13 +115,14 @@ fn main() {
 
         // Remove stale paths
         for stale in stale_paths {
-            let empty = HashSet::new();
-            let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps(
+            let _empty: HashSet<u32> = HashSet::new();
+            let empty_ids = HashSet::new();
+            let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps_ids(
                 &stale,
-                &empty,
-                &mut file_classnames,
-                &mut classname_counts,
-                &mut global_classnames,
+                &empty_ids,
+                &mut file_classnames_ids,
+                &mut classname_counts_ids,
+                &mut global_classnames_ids,
             );
             let _ = cache.remove(&stale);
             total_added_in_files += a_f;
@@ -127,40 +133,32 @@ fn main() {
 
         // Iterate files; skip parsing if unchanged via cache.get
         for file in files {
-            match cache.get(&file) {
-                Ok(Some(_cached)) => {
-                    // Unchanged: skip diff (already in maps from initial cache load)
-                }
-                _ => {
-                    // Parse & update
-                    let classnames = parser::parse_classnames(&file);
-                    let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps(
-                        &file,
-                        &classnames,
-                        &mut file_classnames,
-                        &mut classname_counts,
-                        &mut global_classnames,
-                    );
-                    let _ = cache.set(&file, &classnames);
-                    total_added_in_files += a_f;
-                    total_removed_in_files += r_f;
-                    total_added_global += a_g;
-                    total_removed_global += r_g;
-                }
-            }
+            match cache.get(&file) { _ => { // treat all as potentially changed for now (simplify)
+                let ids = parser::parse_classnames_ids(&file, &mut interner);
+                let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps_ids(
+                    &file,
+                    &ids,
+                    &mut file_classnames_ids,
+                    &mut classname_counts_ids,
+                    &mut global_classnames_ids,
+                );
+                // Reconstruct string set for cache persistence
+                let mut back_to_strings: HashSet<String> = HashSet::new();
+                for id in &ids { back_to_strings.insert(interner.get(*id).to_string()); }
+                let _ = cache.set(&file, &back_to_strings);
+                total_added_in_files += a_f;
+                total_removed_in_files += r_f;
+                total_added_global += a_g;
+                total_removed_global += r_g;
+            }}
         }
 
     // Only regenerate if hash changed (covers first run as hash updates after regen path)
 
-        let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames.is_empty();
+        let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames_ids.is_empty();
         if should_regen {
             let generate_start = Instant::now();
-            generator::generate_css(
-                &global_classnames,
-                &output_file,
-                &style_engine,
-                &file_classnames,
-            );
+            generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner);
             let generate_duration = generate_start.elapsed();
             let total_duration = scan_start.elapsed();
             let parse_and_update_duration = total_duration.saturating_sub(generate_duration);
@@ -214,9 +212,10 @@ fn main() {
                                 watcher::process_file_remove(
                                     &cache,
                                     path,
-                                    &mut file_classnames,
-                                    &mut classname_counts,
-                                    &mut global_classnames,
+                                    &mut file_classnames_ids,
+                                    &mut classname_counts_ids,
+                                    &mut global_classnames_ids,
+                                    &mut interner,
                                     &output_file,
                                     &style_engine,
                                 );
@@ -224,9 +223,10 @@ fn main() {
                                 watcher::process_file_change(
                                     &cache,
                                     path,
-                                    &mut file_classnames,
-                                    &mut classname_counts,
-                                    &mut global_classnames,
+                                    &mut file_classnames_ids,
+                                    &mut classname_counts_ids,
+                                    &mut global_classnames_ids,
+                                    &mut interner,
                                     &output_file,
                                     &style_engine,
                                 );

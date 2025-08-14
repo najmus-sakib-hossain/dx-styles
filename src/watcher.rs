@@ -1,5 +1,5 @@
 use crate::{
-    cache::ClassnameCache, data_manager, engine::StyleEngine, generator, parser, utils,
+    cache::ClassnameCache, data_manager, engine::StyleEngine, generator, parser, utils, interner::ClassInterner,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -10,46 +10,45 @@ use std::{
 pub fn process_file_change(
     cache: &ClassnameCache,
     path: &Path,
-    file_classnames: &mut HashMap<PathBuf, HashSet<String>>,
-    classname_counts: &mut HashMap<String, u32>,
-    global_classnames: &mut HashSet<String>,
+    file_classnames_ids: &mut HashMap<PathBuf, HashSet<u32>>,
+    classname_counts_ids: &mut HashMap<u32, u32>,
+    global_classnames_ids: &mut HashSet<u32>,
+    interner: &mut ClassInterner,
     output_path: &Path,
     style_engine: &StyleEngine,
 ) {
     let total_start = Instant::now();
 
     let parse_start = Instant::now();
-    let classnames = parser::parse_classnames(path);
+    let class_ids = parser::parse_classnames_ids(path, interner);
     let parse_duration = parse_start.elapsed();
 
     let update_maps_start = Instant::now();
-    let (added_file, removed_file, added_global, removed_global, added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps(
+    let (added_file, removed_file, added_global, removed_global, added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps_ids(
         path,
-        &classnames,
-        file_classnames,
-        classname_counts,
-        global_classnames,
+        &class_ids,
+        file_classnames_ids,
+        classname_counts_ids,
+        global_classnames_ids,
     );
     let update_maps_duration = update_maps_start.elapsed();
 
     let mut generate_css_duration = Duration::new(0, 0);
     if removed_global > 0 {
         let generate_css_start = Instant::now();
-        generator::generate_css(
-            global_classnames,
-            output_path,
-            style_engine,
-            file_classnames,
-        );
+        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner);
         generate_css_duration = generate_css_start.elapsed();
     } else if added_global > 0 {
         let generate_css_start = Instant::now();
-        generator::append_new_classes(&added_globals_vec, output_path, style_engine);
+        generator::append_new_classes_ids(&added_globals_vec, output_path, style_engine, interner);
         generate_css_duration = generate_css_start.elapsed();
     }
 
     let cache_set_start = Instant::now();
-    let _ = cache.set(path, &classnames);
+    // Persist string forms for now.
+    let mut back_to_strings: HashSet<String> = HashSet::new();
+    for id in &class_ids { back_to_strings.insert(interner.get(*id).to_string()); }
+    let _ = cache.set(path, &back_to_strings);
     let cache_set_duration = cache_set_start.elapsed();
 
     let timings = utils::ChangeTimings {
@@ -75,32 +74,29 @@ pub fn process_file_change(
 pub fn process_file_remove(
     cache: &ClassnameCache,
     path: &Path,
-    file_classnames: &mut HashMap<PathBuf, HashSet<String>>,
-    classname_counts: &mut HashMap<String, u32>,
-    global_classnames: &mut HashSet<String>,
+    file_classnames_ids: &mut HashMap<PathBuf, HashSet<u32>>,
+    classname_counts_ids: &mut HashMap<u32, u32>,
+    global_classnames_ids: &mut HashSet<u32>,
+    interner: &mut ClassInterner,
     output_path: &Path,
     style_engine: &StyleEngine,
 ) {
     let total_start = Instant::now();
     let update_maps_start = Instant::now();
-    let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps(
+    let empty: HashSet<u32> = HashSet::new();
+    let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps_ids(
         path,
-        &HashSet::new(),
-        file_classnames,
-        classname_counts,
-        global_classnames,
+        &empty,
+        file_classnames_ids,
+        classname_counts_ids,
+        global_classnames_ids,
     );
     let update_maps_duration = update_maps_start.elapsed();
 
     let mut generate_css_duration = Duration::new(0, 0);
     if removed_global > 0 {
         let generate_css_start = Instant::now();
-        generator::generate_css(
-            global_classnames,
-            output_path,
-            style_engine,
-            file_classnames,
-        );
+        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner);
         generate_css_duration = generate_css_start.elapsed();
     }
 
