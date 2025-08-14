@@ -2,6 +2,25 @@
 Enhance Developer Experience
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git
+
+wget https://github.com/google/flatbuffers/archive/refs/tags/v23.5.26.tar.gz
+
+tar -zxvf v23.5.26.tar.gz
+cd flatbuffers-23.5.26
+
+mkdir build
+cd build
+cmake ..
+make -j$(nproc)
+
+sudo make install
+
+flatc --version
+```
+
+```bash
 sudo apt-get update && sudo apt-get install -y build-essential pkg-config curl git cmake
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
