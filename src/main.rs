@@ -162,6 +162,8 @@ fn main() {
         let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames_ids.is_empty();
         if should_regen {
             let generate_start = Instant::now();
+            // Prewarm engine rule table so subsequent lookups are O(1) Arc clones.
+            style_engine.prewarm(&interner);
             generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner);
             let generate_duration = generate_start.elapsed();
             let total_duration = scan_start.elapsed();
