@@ -23,7 +23,7 @@ pub fn process_file_change(
     let parse_duration = parse_start.elapsed();
 
     let update_maps_start = Instant::now();
-    let (added_file, removed_file, added_global, removed_global) = data_manager::update_class_maps(
+    let (added_file, removed_file, added_global, removed_global, added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps(
         path,
         &classnames,
         file_classnames,
@@ -33,7 +33,7 @@ pub fn process_file_change(
     let update_maps_duration = update_maps_start.elapsed();
 
     let mut generate_css_duration = Duration::new(0, 0);
-    if added_global > 0 || removed_global > 0 {
+    if removed_global > 0 {
         let generate_css_start = Instant::now();
         generator::generate_css(
             global_classnames,
@@ -41,6 +41,10 @@ pub fn process_file_change(
             style_engine,
             file_classnames,
         );
+        generate_css_duration = generate_css_start.elapsed();
+    } else if added_global > 0 {
+        let generate_css_start = Instant::now();
+        generator::append_new_classes(&added_globals_vec, output_path, style_engine);
         generate_css_duration = generate_css_start.elapsed();
     }
 
@@ -79,7 +83,7 @@ pub fn process_file_remove(
 ) {
     let total_start = Instant::now();
     let update_maps_start = Instant::now();
-    let (added_file, removed_file, added_global, removed_global) = data_manager::update_class_maps(
+    let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps(
         path,
         &HashSet::new(),
         file_classnames,

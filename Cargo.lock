@@ -373,6 +373,7 @@ dependencies = [
  "rkyv 0.8.11",
  "serde",
  "sled",
+ "smallvec",
  "sysinfo",
  "toml",
  "walkdir",

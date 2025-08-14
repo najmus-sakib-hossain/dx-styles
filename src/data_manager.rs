@@ -7,7 +7,7 @@ pub fn update_class_maps(
     file_classnames: &mut HashMap<PathBuf, HashSet<String>>,
     classname_counts: &mut HashMap<String, u32>,
     global_classnames: &mut HashSet<String>,
-) -> (usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, Vec<String>, Vec<String>) {
     let old_classnames = file_classnames.get(path).cloned().unwrap_or_default();
     let added_in_file: HashSet<_> = new_classnames.difference(&old_classnames).cloned().collect();
     let removed_in_file: HashSet<_> = old_classnames.difference(new_classnames).cloned().collect();
@@ -15,21 +15,25 @@ pub fn update_class_maps(
     let mut added_in_global = 0;
     let mut removed_in_global = 0;
 
+    let mut removed_global_names = Vec::new();
     for cn in &removed_in_file {
         if let Some(count) = classname_counts.get_mut(cn) {
             *count -= 1;
             if *count == 0 {
                 global_classnames.remove(cn);
                 removed_in_global += 1;
+                removed_global_names.push(cn.clone());
             }
         }
     }
 
+    let mut added_global_names = Vec::new();
     for cn in &added_in_file {
         let count = classname_counts.entry(cn.clone()).or_insert(0);
         if *count == 0 {
             global_classnames.insert(cn.clone());
             added_in_global += 1;
+            added_global_names.push(cn.clone());
         }
         *count += 1;
     }
@@ -40,5 +44,7 @@ pub fn update_class_maps(
         removed_in_file.len(),
         added_in_global,
         removed_in_global,
+        added_global_names,
+        removed_global_names,
     )
 }

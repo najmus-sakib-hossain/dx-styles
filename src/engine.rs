@@ -1,5 +1,6 @@
 use lru::LruCache;
 use std::collections::HashMap;
+use smallvec::SmallVec;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -100,25 +101,31 @@ impl StyleEngine {
         })
     }
 
-    pub fn generate_css_for_class(&self, class_name: &str) -> Option<String> {
-        if let Some(cached) = self.css_cache.lock().unwrap().get(class_name) {
-            return Some(cached.clone());
+    // Internal: compute CSS without consulting / mutating the cache (allocation-light)
+    fn compute_css(&self, class_name: &str) -> Option<String> {
+        // Fast path: no prefixes
+        let mut last_colon = None;
+        for (i, b) in class_name.as_bytes().iter().enumerate() {
+            if *b == b':' { last_colon = Some(i); }
         }
+        let (prefix_segment, base_class) = if let Some(idx) = last_colon {
+            (&class_name[..idx], &class_name[idx+1..])
+        } else {
+            ("", class_name)
+        };
 
-        let parts: Vec<&str> = class_name.split(':').collect();
-        let base_class = *parts.last()?;
-        let prefixes = &parts[..parts.len() - 1];
-
-        let mut media_queries = Vec::new();
+        let mut media_queries: SmallVec<[String; 4]> = SmallVec::new();
         let mut pseudo_classes = String::new();
 
-        for prefix in prefixes {
-            if let Some(screen_value) = self.screens.get(*prefix) {
-                media_queries.push(format!("@media (min-width: {})", screen_value));
-            } else if let Some(cq_value) = self.container_queries.get(*prefix) {
-                media_queries.push(format!("@container (min-width: {})", cq_value));
-            } else if let Some(state_value) = self.states.get(*prefix) {
-                pseudo_classes.push_str(state_value);
+        if !prefix_segment.is_empty() {
+            for part in prefix_segment.split(':') {
+                if let Some(screen_value) = self.screens.get(part) {
+                    media_queries.push(format!("@media (min-width: {})", screen_value));
+                } else if let Some(cq_value) = self.container_queries.get(part) {
+                    media_queries.push(format!("@container (min-width: {})", cq_value));
+                } else if let Some(state_value) = self.states.get(part) {
+                    pseudo_classes.push_str(state_value);
+                }
             }
         }
 
@@ -128,31 +135,73 @@ impl StyleEngine {
             .cloned()
             .or_else(|| self.generate_dynamic_css(base_class));
 
-        if let Some(css) = core_css {
-            let selector = format!(
-                ".{}{}",
-                class_name.replace(":", "\\:").replace("@", "\\@"),
-                pseudo_classes
-            );
-            let css_body = format!("{} {{\n  {};\n}}", selector, css);
+        core_css.map(|css| {
+            let mut selector = String::from(".");
+            // Escape ':' and '@'
+            for ch in class_name.chars() {
+                match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
+            }
+            selector.push_str(&pseudo_classes);
+            let mut css_body = String::new();
+            css_body.push_str(&selector);
+            css_body.push_str(" {\n  ");
+            css_body.push_str(&css);
+            css_body.push_str(";\n}");
+            for mq in media_queries.iter().rev() { // reverse fold
+                let mut wrapped = String::new();
+                wrapped.push_str(mq);
+                wrapped.push_str(" {\n");
+                for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
+                wrapped.push('}');
+                css_body = wrapped;
+            }
+            css_body
+        })
+    }
 
-            let final_css = media_queries.iter().rfold(css_body, |acc, mq| {
-                let indented_acc = acc
-                    .lines()
-                    .map(|line| format!("  {}", line))
-                    .collect::<Vec<String>>()
-                    .join("\n");
-                format!("{} {{\n{}\n}}", mq, indented_acc)
-            });
+    // Batch variant: drastically reduces mutex contention by performing two short lock phases.
+    pub fn generate_css_for_classes_batch<'a>(&self, class_names: &[&'a str]) -> Vec<String> {
+        // First lock: gather cached & identify misses
+        let mut cache = self.css_cache.lock().unwrap();
+        let mut results: Vec<(usize, String)> = Vec::with_capacity(class_names.len());
+        let mut misses: Vec<(usize, &str)> = Vec::new();
+        for (idx, &name) in class_names.iter().enumerate() {
+            if let Some(c) = cache.get(name) {
+                results.push((idx, c.clone()));
+            } else {
+                misses.push((idx, name));
+            }
+        }
+        drop(cache); // release early
 
-            self.css_cache
-                .lock()
-                .unwrap()
-                .put(class_name.to_string(), final_css.clone());
-            return Some(final_css);
+        if !misses.is_empty() {
+            // Compute misses (currently sequential; could parallelize if large)
+            // Threshold chosen to avoid rayon overhead for small batches.
+            let parallel = misses.len() > 256; // heuristic
+            let mut computed: Vec<(usize, String)> = if parallel {
+                use rayon::prelude::*;
+                misses
+                    .par_iter()
+                    .filter_map(|(idx, name)| self.compute_css(name).map(|c| (*idx, c)))
+                    .collect()
+            } else {
+                misses
+                    .into_iter()
+                    .filter_map(|(idx, name)| self.compute_css(name).map(|c| (idx, c)))
+                    .collect()
+            };
+
+            // Second lock: insert into cache
+            let mut cache = self.css_cache.lock().unwrap();
+            for (idx, css) in &computed {
+                cache.put(class_names[*idx].to_string(), css.clone());
+            }
+            results.append(&mut computed);
         }
 
-        None
+        // Re-order to original order of class_names
+        results.sort_unstable_by_key(|(idx, _)| *idx);
+        results.into_iter().map(|(_, css)| css).collect()
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {
@@ -195,3 +244,4 @@ impl StyleEngine {
         None
     }
 }
+

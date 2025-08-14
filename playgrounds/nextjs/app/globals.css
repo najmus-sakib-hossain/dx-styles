@@ -131,3 +131,9 @@
 .w-screen {
   width: 100vw;
 }
+
+@media (min-width: 768px) {
+  .md\:p-4 {
+    padding: 1rem;
+  }
+}

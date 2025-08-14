@@ -105,7 +105,7 @@ fn main() {
         let mut total_removed_global = 0;
 
         for (file, current_classnames) in results {
-            let (added_file, removed_file, added_global, removed_global) =
+            let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) =
                 data_manager::update_class_maps(
                     &file,
                     &current_classnames,
@@ -204,3 +204,4 @@ fn main() {
         }
     }
 }
+
