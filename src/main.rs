@@ -10,7 +10,6 @@ use crate::cache::ClassnameCache;
 use colored::Colorize;
 use notify::RecursiveMode;
 use notify_debouncer_full::new_debouncer;
-use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -91,33 +90,62 @@ fn main() {
     let scan_start = Instant::now();
     let files = utils::find_code_files(&dir);
     if !files.is_empty() {
-        let results: Vec<_> = files
-            .par_iter()
-            .filter_map(|file| {
-                let classnames = parser::parse_classnames(file);
-                Some((file.clone(), classnames))
-            })
+        let file_set: HashSet<PathBuf> = files.iter().cloned().collect();
+
+        // Detect stale cached entries (files deleted since last run)
+        let stale_paths: Vec<PathBuf> = file_classnames
+            .keys()
+            .filter(|p| !file_set.contains(*p))
+            .cloned()
             .collect();
 
-        let mut total_added_in_files = 0;
-        let mut total_removed_in_files = 0;
-        let mut total_added_global = 0;
-        let mut total_removed_global = 0;
+        let mut total_added_in_files = 0usize;
+        let mut total_removed_in_files = 0usize;
+        let mut total_added_global = 0usize;
+        let mut total_removed_global = 0usize;
 
-        for (file, current_classnames) in results {
-            let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) =
-                data_manager::update_class_maps(
-                    &file,
-                    &current_classnames,
-                    &mut file_classnames,
-                    &mut classname_counts,
-                    &mut global_classnames,
-                );
-            total_added_in_files += added_file;
-            total_removed_in_files += removed_file;
-            total_added_global += added_global;
-            total_removed_global += removed_global;
+        // Remove stale paths
+        for stale in stale_paths {
+            let empty = HashSet::new();
+            let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps(
+                &stale,
+                &empty,
+                &mut file_classnames,
+                &mut classname_counts,
+                &mut global_classnames,
+            );
+            let _ = cache.remove(&stale);
+            total_added_in_files += a_f;
+            total_removed_in_files += r_f;
+            total_added_global += a_g;
+            total_removed_global += r_g;
         }
+
+        // Iterate files; skip parsing if unchanged via cache.get
+        for file in files {
+            match cache.get(&file) {
+                Ok(Some(_cached)) => {
+                    // Unchanged: skip diff (already in maps from initial cache load)
+                }
+                _ => {
+                    // Parse & update
+                    let classnames = parser::parse_classnames(&file);
+                    let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps(
+                        &file,
+                        &classnames,
+                        &mut file_classnames,
+                        &mut classname_counts,
+                        &mut global_classnames,
+                    );
+                    let _ = cache.set(&file, &classnames);
+                    total_added_in_files += a_f;
+                    total_removed_in_files += r_f;
+                    total_added_global += a_g;
+                    total_removed_global += r_g;
+                }
+            }
+        }
+
         if (total_added_global > 0 || total_removed_global > 0) || !global_classnames.is_empty() {
             let generate_start = Instant::now();
             generator::generate_css(
