@@ -6,6 +6,12 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+use fxhash::FxHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+// Stores hash of current global class set to skip redundant full regenerations elsewhere.
+static GLOBAL_CLASS_HASH: AtomicU64 = AtomicU64::new(0);
 
 pub fn process_file_change(
     cache: &ClassnameCache,
@@ -35,6 +41,7 @@ pub fn process_file_change(
     let mut generate_css_duration = Duration::new(0, 0);
     if removed_global > 0 {
         let generate_css_start = Instant::now();
+        // Compute new hash and compare; always regen on removals though (structure changed)
         generator::generate_css(
             global_classnames,
             output_path,
@@ -42,10 +49,22 @@ pub fn process_file_change(
             file_classnames,
         );
         generate_css_duration = generate_css_start.elapsed();
+        // Update hash after removal regen
+        let mut hasher = FxHasher::default();
+        let mut v: Vec<&String> = global_classnames.iter().collect();
+        v.sort_unstable();
+        for s in &v { s.hash(&mut hasher); }
+        GLOBAL_CLASS_HASH.store(hasher.finish(), Ordering::Relaxed);
     } else if added_global > 0 {
         let generate_css_start = Instant::now();
+        // Fast append path; recompute hash after append
         generator::append_new_classes(&added_globals_vec, output_path, style_engine);
         generate_css_duration = generate_css_start.elapsed();
+        let mut hasher = FxHasher::default();
+        let mut v: Vec<&String> = global_classnames.iter().collect();
+        v.sort_unstable();
+        for s in &v { s.hash(&mut hasher); }
+        GLOBAL_CLASS_HASH.store(hasher.finish(), Ordering::Relaxed);
     }
 
     let cache_set_start = Instant::now();

@@ -76,13 +76,15 @@ pub fn append_new_classes(
         .append(true)
         .open(output_path)
         .expect("Failed to open CSS file for appending");
-    // Prepend double newline if file not empty
     let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
-    if need_leading { writeln!(file).ok(); writeln!(file).ok(); }
-    // Write joined with double newline to match full generation formatting.
+    // Estimate buffer size: average rule length + separators.
+    let estimated: usize = rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
+    let mut buffer = String::with_capacity(estimated);
+    if need_leading { buffer.push_str("\n\n"); }
     for (i, rule) in rules.iter().enumerate() {
-        if i > 0 { writeln!(file).ok(); writeln!(file).ok(); }
-        file.write_all(rule.as_bytes()).ok();
+        if i > 0 { buffer.push_str("\n\n"); }
+        buffer.push_str(rule);
     }
+    let _ = file.write_all(buffer.as_bytes());
 }
 

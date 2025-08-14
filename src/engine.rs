@@ -97,7 +97,8 @@ impl StyleEngine {
             screens,
             states,
             container_queries,
-            css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
+            // Larger cache to reduce recomputation frequency during dev hot-reloads.
+            css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
         })
     }
 
