@@ -1,54 +1,78 @@
-.text-lg {
-  font-size: 1.125rem;
+.hidden {
+  display: none;
 }
 
-@container (min-width: 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
-}
-
-.w-screen {
-  width: 100vw;
-}
-
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
+.mt-2 {
+  margin-top: .5rem;
 }
 
 .p-6 {
   padding: 1.5rem;
 }
 
-.mt-2 {
-  margin-top: 0.5rem;
+@container (width >= 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
 }
 
-.mt-8 {
-  margin-top: 2rem;
+.text-lg {
+  font-size: 1.125rem;
 }
 
-.text-4xl {
-  font-size: 2.25rem;
+@container (width >= 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
 }
 
 .border-dashed {
   border-style: dashed;
 }
 
-.w-full {
-  width: 100%;
+.p-4 {
+  padding: 1rem;
 }
 
-.rounded-lg {
-  border-radius: 0.5rem;
+.transition-all {
+  transition-property: all;
 }
 
-@container (min-width: 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
+@container (width >= 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+@media (width >= 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
+  }
+}
+
+.text-4xl {
+  font-size: 2.25rem;
+}
+
+.absolute {
+  position: absolute;
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.duration-300 {
+  transition-duration: .3s;
+}
+
+@media (width >= 768px) {
+  .md\:p-8 {
+    padding: 2rem;
   }
 }
 
@@ -56,34 +80,8 @@
   resize: horizontal;
 }
 
-@media (min-width: 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
-  }
-}
-
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
-.absolute {
-  position: absolute;
-}
-
 .font-bold {
   font-weight: 700;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-.min-h-screen {
-  min-height: 100vh;
 }
 
 .max-w-5xl {
@@ -94,24 +92,26 @@
   overflow: auto;
 }
 
-.p-4 {
-  padding: 1rem;
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
 }
 
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
+.w-full {
+  width: 100%;
 }
 
-.transition-all {
-  transition-property: all;
+.w-screen {
+  width: 100vw;
 }
 
-.container-type-inline-size {
-  container-type: inline-size;
+.min-h-screen {
+  min-height: 100vh;
 }
 
-.hidden {
-  display: none;
+.rounded-lg {
+  border-radius: .5rem;
+}
+
+.mt-8 {
+  margin-top: 2rem;
 }
