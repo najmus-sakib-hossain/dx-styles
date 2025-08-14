@@ -109,6 +109,7 @@ impl StyleEngine {
 
     /// Precompute CSS rules for all interned class names.
     /// Should be called after the interner has been populated with all known names.
+    #[allow(dead_code)]
     pub fn prewarm(&self, interner: &crate::interner::ClassInterner) {
         let len = interner.len();
         let mut vec: Vec<Option<Arc<String>>> = Vec::with_capacity(len);
@@ -186,6 +187,7 @@ impl StyleEngine {
     }
 
     // ID-based compute path: use interner's pre-escaped selector and avoid per-char work.
+    #[allow(dead_code)]
     fn compute_css_id(&self, id: u32, interner: &crate::interner::ClassInterner) -> Option<String> {
         // Delegate to a raw+escaped based compute function for reuse in parallel path.
         let class_name = interner.get(id);

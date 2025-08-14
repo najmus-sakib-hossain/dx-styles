@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use libc::{cpu_set_t, sched_setaffinity, CPU_SET};
-use memmap2::MmapMut;
 use rayon::prelude::*;
 use sysinfo::System;
 
@@ -38,6 +37,7 @@ fn get_dir() -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn pin_thread(core_id: usize) -> io::Result<()> {
     unsafe {
         let mut cpu_set: cpu_set_t = std::mem::zeroed();
@@ -53,6 +53,7 @@ fn pin_thread(core_id: usize) -> io::Result<()> {
 #[cfg(not(target_os = "linux"))]
 fn pin_thread(_core_id: usize) -> io::Result<()> { Ok(()) }
 
+#[allow(dead_code)]
 fn run_in_pinned_pool<F>(benchmark_fn: F) -> io::Result<()>
 where
     F: FnOnce() -> io::Result<()> + Send,
