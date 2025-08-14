@@ -1,21 +1,17 @@
-.duration-300 {
-  transition-duration: 300ms;
+.mt-8 {
+  margin-top: 2rem;
 }
 
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
+.p-4 {
+  padding: 1rem;
 }
 
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
+.text-lg {
+  font-size: 1.125rem;
 }
 
-.w-full {
-  width: 100%;
+.min-h-screen {
+  min-height: 100vh;
 }
 
 @media (min-width: 768px) {
@@ -24,74 +20,12 @@
   }
 }
 
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-@container (min-width: 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
-  }
-}
-
 .hover\:mt-5:hover {
   margin-top: 1.25rem;
 }
 
-.p-4 {
-  padding: 1rem;
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.mt-8 {
-  margin-top: 2rem;
+.mt-2 {
+  margin-top: 0.5rem;
 }
 
 @container (min-width: 32rem) {
@@ -100,6 +34,72 @@
   }
 }
 
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.text-4xl {
+  font-size: 2.25rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+@container (min-width: 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+
 .max-w-full {
   max-width: 100%;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.duration-300 {
+  transition-duration: 300ms;
+}
+
+@container (min-width: 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
+}
+
+.resize-x {
+  resize: horizontal;
 }
