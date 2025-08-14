@@ -1,5 +1,29 @@
-.max-w-full {
-  max-width: 100%;
+.font-bold {
+  font-weight: 700;
+}
+
+.hover\:mt-5:hover {
+  margin-top: 1.25rem;
+}
+
+.duration-300 {
+  transition-duration: 300ms;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
 }
 
 @container (min-width: 32rem) {
@@ -8,90 +32,10 @@
   }
 }
 
-.transition-all {
-  transition-property: all;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
 @container (min-width: 42rem) {
   .\@2xl\:text-3xl {
     font-size: 1.875rem;
   }
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-@media (min-width: 768px) {
-  .md\:p-9 {
-    padding: 2.25rem;
-  }
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-@media (min-width: 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
-  }
-}
-
-.hover\:mt-5:hover {
-  margin-top: 1.25rem;
-}
-
-.border-dashed {
-  border-style: dashed;
 }
 
 @container (min-width: 24rem) {
@@ -100,6 +44,62 @@
   }
 }
 
+@media (min-width: 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
+  }
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
 .container-type-inline-size {
   container-type: inline-size;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.mt-8 {
+  margin-top: 2rem;
+}
+
+.text-4xl {
+  font-size: 2.25rem;
+}
+
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
 }

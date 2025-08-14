@@ -1,6 +1,7 @@
 use lru::LruCache;
 use std::collections::HashMap;
 use smallvec::SmallVec;
+use rayon::prelude::*;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -163,7 +164,15 @@ impl StyleEngine {
 
     // ID-based compute path: use interner's pre-escaped selector and avoid per-char work.
     fn compute_css_id(&self, id: u32, interner: &crate::interner::ClassInterner) -> Option<String> {
+        // Delegate to a raw+escaped based compute function for reuse in parallel path.
         let class_name = interner.get(id);
+        let esc = interner.escaped(id);
+        self.compute_css_from_raw_and_escaped(class_name, esc)
+    }
+
+    // Compute CSS from the original (raw) class name and its pre-escaped selector.
+    // This is safe to call from multiple threads as it only reads internal maps.
+    fn compute_css_from_raw_and_escaped(&self, class_name: &str, escaped: &str) -> Option<String> {
         let last_colon = class_name.rfind(':');
         let (prefix_segment, base_class) = if let Some(idx) = last_colon {
             (&class_name[..idx], &class_name[idx + 1..])
@@ -181,7 +190,6 @@ impl StyleEngine {
                 } else if let Some(cq_value) = self.container_queries.get(part) {
                     media_queries.push(format!("@container (min-width: {})", cq_value));
                 } else if let Some(state_value) = self.states.get(part) {
-                    // states usually contain a pseudo-class like ":hover" or similar; append to selector
                     pseudo_classes.push_str(state_value);
                 }
             }
@@ -194,21 +202,17 @@ impl StyleEngine {
             .or_else(|| self.generate_dynamic_css(base_class));
 
         core_css.map(|css| {
-            // Use interner's precomputed escaped selector for the full class name.
-            let esc = interner.escaped(id);
-            let mut selector = String::with_capacity(esc.len() + pseudo_classes.len() + 1);
+            let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
             selector.push('.');
-            selector.push_str(esc);
+            selector.push_str(escaped);
             selector.push_str(&pseudo_classes);
 
-            // Estimate capacity for final CSS to reduce reallocations
             let mut css_body = String::with_capacity(selector.len() + css.len() + 16);
             css_body.push_str(&selector);
             css_body.push_str(" {\n  ");
             css_body.push_str(&css);
             css_body.push_str(";\n}");
 
-            // Wrap with media queries (reverse order)
             for mq in media_queries.iter().rev() {
                 let mut wrapped = String::with_capacity(mq.len() + css_body.len() + 8);
                 wrapped.push_str(mq);
@@ -253,13 +257,19 @@ impl StyleEngine {
         }
 
         if !misses.is_empty() {
-            // Compute misses and insert into cache in one locked phase.
-            let mut computed: Vec<(usize, Arc<String>)> = Vec::with_capacity(misses.len());
-            for (idx, id) in &misses {
-                if let Some(css) = self.compute_css_id(*id, interner) {
-                    computed.push((*idx, Arc::new(css)));
-                }
-            }
+            // Pre-extract raw and escaped strings from interner (single-threaded) then compute in parallel.
+            let miss_sources: Vec<(usize, u32, String, String)> = misses
+                .iter()
+                .map(|(idx, id)| (*idx, *id, interner.get(*id).to_string(), interner.escaped(*id).to_string()))
+                .collect();
+
+            let computed: Vec<(usize, Arc<String>)> = miss_sources
+                .into_par_iter()
+                .filter_map(|(idx, id, raw, esc)| {
+                    self.compute_css_from_raw_and_escaped(&raw, &esc).map(|css| (idx, Arc::new(css)))
+                })
+                .collect();
+
             let mut cache = self.css_cache.lock().unwrap();
             for (idx, css_arc) in &computed {
                 cache.put(ids[*idx], Arc::clone(css_arc));
