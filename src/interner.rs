@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-// Simple non-thread-safe interner. Wrap in RwLock/Arc externally for concurrency.
 pub struct ClassInterner {
     map: HashMap<String, u32>,
     strings: Vec<String>,
@@ -18,7 +17,6 @@ impl ClassInterner {
         if let Some(&id) = self.map.get(s) { return id; }
         let id = self.strings.len() as u32;
         self.strings.push(s.to_string());
-        // Precompute escaped selector form (escape ':' and '@') once.
         let mut esc = String::with_capacity(s.len() + 4);
         for ch in s.chars() {
             match ch { ':' => esc.push_str("\\:"), '@' => esc.push_str("\\@"), _ => esc.push(ch) }

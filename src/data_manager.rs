@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-#[allow(dead_code)] // Legacy string-based API retained temporarily for reference; prefer *_ids variant.
+#[allow(dead_code)]
 pub fn update_class_maps(
     path: &Path,
     new_classnames: &HashSet<String>,
@@ -50,7 +50,6 @@ pub fn update_class_maps(
     )
 }
 
-// ID-based variant (u32) used after interning migration.
 pub fn update_class_maps_ids(
     path: &Path,
     new_ids: &HashSet<u32>,

@@ -105,10 +105,7 @@ fn read_files(paths: &[PathBuf]) {
 fn update_files_smartly(paths: &[PathBuf]) {
     paths.par_iter().for_each(|path| {
         let result = (|| -> io::Result<()> {
-            // Open and perform a direct write at the start of the file.
-            // For small fixed-size updates this is often faster than mmap per-file.
             let mut file = OpenOptions::new().write(true).open(path)?;
-            // Ensure we write from the start
             use std::io::Seek;
             use std::io::SeekFrom;
             file.seek(SeekFrom::Start(0))?;

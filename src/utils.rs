@@ -22,7 +22,6 @@ pub fn find_code_files(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Buffered write helper that mirrors the fast update logic used in dx_io.
 pub fn write_buffered(path: &Path, data: &[u8]) -> io::Result<()> {
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
     let mut writer = BufWriter::new(file);

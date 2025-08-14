@@ -8,6 +8,5 @@ pub mod watcher;
 pub mod interner;
 pub mod io;
 
-// Re-export commonly used types
 pub use engine::StyleEngine;
 pub use interner::ClassInterner;
