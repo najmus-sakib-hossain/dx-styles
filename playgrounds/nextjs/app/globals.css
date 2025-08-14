@@ -1,101 +1,41 @@
-.w-full {
-  width: 100%;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.w-screen {
-  width: 100vw;
-}
-
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
-.mt-8 {
-  margin-top: 2rem;
-}
-
-.border-dashed {
-  border-style: dashed;
+.text-lg {
+  font-size: 1.125rem;
 }
 
 .overflow-auto {
   overflow: auto;
 }
 
+.text-4xl {
+  font-size: 2.25rem;
+}
+
 .min-h-screen {
   min-height: 100vh;
 }
 
-.max-w-full {
-  max-width: 100%;
+.p-6 {
+  padding: 1.5rem;
 }
 
-@container (min-width: 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
+.transition-all {
+  transition-property: all;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
 }
 
 .container-type-inline-size {
   container-type: inline-size;
 }
 
-.font-bold {
-  font-weight: 700;
-}
-
-@container (min-width: 42rem) {
-  .\@2xl\:text-3xl {
-    font-size: 1.875rem;
-  }
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.absolute {
-  position: absolute;
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
 .p-4 {
   padding: 1rem;
 }
 
-@container (min-width: 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
-  }
-}
-
-@media (min-width: 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
-  }
+.mt-8 {
+  margin-top: 2rem;
 }
 
 @media (min-width: 768px) {
@@ -104,14 +44,74 @@
   }
 }
 
+.max-w-full {
+  max-width: 100%;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+@container (min-width: 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
+}
+
+.absolute {
+  position: absolute;
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+@container (min-width: 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
+}
+
+.w-screen {
+  width: 100vw;
+}
+
+@container (min-width: 42rem) {
+  .\@2xl\:text-3xl {
+    font-size: 1.875rem;
+  }
+}
+
 .hover\:mt-5:hover {
   margin-top: 1.25rem;
 }
 
-.mt-2 {
-  margin-top: 0.5rem;
+.w-full {
+  width: 100%;
 }
 
-.hidden {
-  display: none;
+@media (min-width: 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
+  }
+}
+
+.duration-300 {
+  transition-duration: 300ms;
+}
+
+.flex {
+  display: flex;
 }
