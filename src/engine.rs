@@ -4,6 +4,7 @@ use smallvec::SmallVec;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
+use std::sync::Arc;
 
 mod styles_generated {
     #![allow(
@@ -22,7 +23,7 @@ pub struct StyleEngine {
     screens: HashMap<String, String>,
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
-    css_cache: Mutex<LruCache<u32, String>>,
+    css_cache: Mutex<LruCache<u32, Arc<String>>>,
 }
 
 impl StyleEngine {
@@ -235,27 +236,42 @@ impl StyleEngine {
         out
     }
 
-    pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<String> {
-        let mut cache = self.css_cache.lock().unwrap();
-        let mut results: Vec<(usize, String)> = Vec::with_capacity(ids.len());
+    pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<Arc<String>> {
+        // Preallocate result slots to avoid sorting and intermediate vectors.
+        let mut result_slots: Vec<Option<Arc<String>>> = vec![None; ids.len()];
         let mut misses: Vec<(usize, u32)> = Vec::new();
-        for (idx, &id) in ids.iter().enumerate() {
-            if let Some(c) = cache.get(&id) { results.push((idx, c.clone())); } else { misses.push((idx, id)); }
+
+        {
+            let mut cache = self.css_cache.lock().unwrap();
+            for (idx, &id) in ids.iter().enumerate() {
+                if let Some(c) = cache.get(&id) {
+                    result_slots[idx] = Some(Arc::clone(c));
+                } else {
+                    misses.push((idx, id));
+                }
+            }
         }
-        drop(cache);
+
         if !misses.is_empty() {
-            let mut computed: Vec<(usize, String)> = Vec::with_capacity(misses.len());
-            for (idx, id) in misses {
-                if let Some(css) = self.compute_css_id(id, interner) {
-                    computed.push((idx, css));
+            // Compute misses and insert into cache in one locked phase.
+            let mut computed: Vec<(usize, Arc<String>)> = Vec::with_capacity(misses.len());
+            for (idx, id) in &misses {
+                if let Some(css) = self.compute_css_id(*id, interner) {
+                    computed.push((*idx, Arc::new(css)));
                 }
             }
             let mut cache = self.css_cache.lock().unwrap();
-            for (idx, css) in &computed { cache.put(ids[*idx], css.clone()); }
-            results.extend(computed);
+            for (idx, css_arc) in &computed {
+                cache.put(ids[*idx], Arc::clone(css_arc));
+                result_slots[*idx] = Some(Arc::clone(css_arc));
+            }
         }
-        results.sort_unstable_by_key(|(i, _)| *i);
-        results.into_iter().map(|(_, css)| css).collect()
+
+        // Collect and return only generated rules (skip ids that produced no CSS).
+        result_slots
+            .into_iter()
+            .filter_map(|opt| opt)
+            .collect()
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {

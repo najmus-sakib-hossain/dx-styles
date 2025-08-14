@@ -1,5 +1,6 @@
 use crate::engine::StyleEngine;
 use crate::interner::ClassInterner;
+use std::sync::Arc;
 use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -100,8 +101,8 @@ pub fn generate_css_ids(
 ) {
     let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
     sorted.sort_unstable();
-    let css_rules = engine.generate_css_for_ids(&sorted, interner);
-    let css_content = css_rules.join("\n\n");
+    let css_rules: Vec<Arc<String>> = engine.generate_css_for_ids(&sorted, interner);
+    let css_content = css_rules.iter().map(|a| a.as_str()).collect::<Vec<_>>().join("\n\n");
     fs::write(output_path, css_content).expect("Failed to write CSS file");
 }
 
@@ -112,14 +113,14 @@ pub fn append_new_classes_ids(
     interner: &ClassInterner,
 ) {
     if new_ids.is_empty() { return; }
-    let rules = engine.generate_css_for_ids(new_ids, interner);
+    let rules: Vec<Arc<String>> = engine.generate_css_for_ids(new_ids, interner);
     if rules.is_empty() { return; }
     use std::fs::OpenOptions; use std::io::Write;
     let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
     let need_leading = file.metadata().map(|m| m.len()>0).unwrap_or(false);
     let mut buf = String::new();
     if need_leading { buf.push_str("\n\n"); }
-    for (i,r) in rules.iter().enumerate() { if i>0 { buf.push_str("\n\n"); } buf.push_str(r); }
+    for (i,r) in rules.iter().enumerate() { if i>0 { buf.push_str("\n\n"); } buf.push_str(r.as_str()); }
     let _ = file.write_all(buf.as_bytes());
 }
 

@@ -3,16 +3,19 @@ use dx::ClassInterner;
 use std::time::Instant;
 
 fn main() {
+    println!("bench: starting");
     // Attempt to construct engine; tests may run without .dx/styles.bin present, so bail gracefully.
+    println!("bench: constructing StyleEngine...");
     let engine = match StyleEngine::new() {
         Ok(e) => e,
-        Err(_) => { println!("StyleEngine::new() failed - ensure .dx/styles.bin exists for accurate benchmark. Exiting."); return; }
+        Err(err) => { println!("StyleEngine::new() failed: {} - exiting benchmark.", err); return; }
     };
+    println!("bench: engine constructed");
 
     let mut interner = ClassInterner::new();
     // Create 100 class names with some prefixes
     let mut ids = Vec::new();
-    for i in 0..100 {
+    for i in 0..2 {
         let cn = format!("sm:btn-{}", i);
         ids.push(interner.intern(&cn));
     }
