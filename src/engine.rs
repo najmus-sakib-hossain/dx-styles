@@ -128,6 +128,49 @@ impl StyleEngine {
         *w = Some(arc);
     }
 
+    /// Ensure the precomputed table includes all currently interned class names.
+    /// Recomputes the entire table if lengths differ or table missing.
+    pub fn ensure_prewarm(&self, interner: &crate::interner::ClassInterner) {
+        // Fast read to decide path
+        let current_len_opt = {
+            let r = self.precomputed.read().unwrap();
+            match &*r { Some(pre) => Some(pre.len()), None => None }
+        };
+        match current_len_opt {
+            None => {
+                // No table yet; build full
+                self.prewarm(interner);
+            }
+            Some(existing) => {
+                let target = interner.len();
+                if target > existing {
+                    // Need to extend with new ids only
+                    let mut w = self.precomputed.write().unwrap();
+                    if let Some(pre_arc) = &mut *w {
+                        let current_len = pre_arc.len();
+                        if current_len < target {
+                            let vec_mut = Arc::make_mut(pre_arc);
+                            for id in current_len..target {
+                                let id_u32 = id as u32;
+                                let raw = interner.get(id_u32);
+                                let esc = interner.escaped(id_u32);
+                                if let Some(css) = self.compute_css_from_raw_and_escaped(raw, esc) {
+                                    vec_mut.push(Some(Arc::new(css)));
+                                } else {
+                                    vec_mut.push(None);
+                                }
+                            }
+                        }
+                    } else {
+                        // Table missing after acquiring write lock (race); rebuild fully
+                        drop(w); // release before recursive
+                        self.prewarm(interner);
+                    }
+                }
+            }
+        }
+    }
+
     // Internal: compute CSS without consulting / mutating the cache (allocation-light)
     fn compute_css(&self, class_name: &str) -> Option<String> {
         // Fast path: no prefixes
@@ -266,16 +309,22 @@ impl StyleEngine {
     }
 
     pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<Arc<String>> {
-        // Fast path: if precomputed table exists, use direct indexed Arc clones.
+        // Fast path: ensure precomputed table (if present) covers all ids, then read directly.
+        {
+            let r = self.precomputed.read().unwrap();
+            if r.is_some() {
+                // Determine max id requested; if beyond table length we must extend.
+                let max_id = ids.iter().copied().max();
+                if let (Some(pre), Some(max_id)) = (r.as_ref(), max_id) {
+                    if (max_id as usize) >= pre.len() { drop(r); self.ensure_prewarm(interner); }
+                }
+            }
+        }
         if let Some(pre) = self.precomputed.read().unwrap().as_ref() {
             let mut out: Vec<Arc<String>> = Vec::with_capacity(ids.len());
             for &id in ids {
                 let idx = id as usize;
-                if idx < pre.len() {
-                    if let Some(a) = &pre[idx] {
-                        out.push(Arc::clone(a));
-                    }
-                }
+                if idx < pre.len() { if let Some(a) = &pre[idx] { out.push(Arc::clone(a)); } }
             }
             return out;
         }
