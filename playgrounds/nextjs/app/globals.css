@@ -16,10 +16,6 @@
   }
 }
 
-.absolute {
-  position: absolute;
-}
-
 .border-dashed {
   border-style: dashed;
 }
@@ -34,14 +30,6 @@
 
 .font-bold {
   font-weight: 700;
-}
-
-.grid {
-  display: grid;
-}
-
-.h-screen {
-  height: 100vh;
 }
 
 .hover\:mt-5:hover {
@@ -92,14 +80,6 @@
   padding: 1.5rem;
 }
 
-.place-content-center {
-  place-content: center;
-}
-
-.place-items-center {
-  place-items: center;
-}
-
 .resize-x {
   resize: horizontal;
 }
@@ -112,10 +92,6 @@
   font-size: 2.25rem;
 }
 
-.text-5xl {
-  font-size: 3rem;
-}
-
 .text-lg {
   font-size: 1.125rem;
 }
@@ -126,14 +102,4 @@
 
 .w-full {
   width: 100%;
-}
-
-.w-screen {
-  width: 100vw;
-}
-
-@media (min-width: 768px) {
-  .md\:p-4 {
-    padding: 1rem;
-  }
 }

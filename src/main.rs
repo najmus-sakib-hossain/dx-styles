@@ -18,8 +18,6 @@ use std::{
     sync::mpsc,
     time::{Duration, Instant},
 };
-use fxhash::FxHasher;
-use std::hash::{Hash, Hasher};
 
 fn main() {
     let styles_toml_path = PathBuf::from("styles.toml");
@@ -91,16 +89,7 @@ fn main() {
 
     // Compute initial hash of global set
     // Track hash of global classnames to skip redundant regeneration.
-    let mut global_hash: Option<u64> = None;
-    {
-        let mut hasher = FxHasher::default();
-        // Order-independent hash: iterate sorted
-        let mut v: Vec<&String> = global_classnames.iter().collect();
-        v.sort_unstable();
-        for s in v { s.hash(&mut hasher); }
-        global_hash = Some(hasher.finish());
-        if cfg!(debug_assertions) { let _ = global_hash.is_some(); }
-    }
+    // Removed global_hash tracking to eliminate unused assignment warnings.
 
     let scan_start = Instant::now();
     let files = utils::find_code_files(&dir);
@@ -162,13 +151,9 @@ fn main() {
         }
 
     // Only regenerate if hash changed (covers first run as hash updates after regen path)
-    let mut hasher = FxHasher::default();
-    let mut v: Vec<&String> = global_classnames.iter().collect();
-    v.sort_unstable();
-    for s in &v { s.hash(&mut hasher); }
-    let new_hash = hasher.finish();
 
-    if global_hash.map_or(true, |h| h != new_hash) {
+        let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames.is_empty();
+        if should_regen {
             let generate_start = Instant::now();
             generator::generate_css(
                 &global_classnames,
@@ -198,7 +183,6 @@ fn main() {
                 total_removed_global,
                 timings,
             );
-            global_hash = Some(new_hash);
         }
     } else {
         println!(

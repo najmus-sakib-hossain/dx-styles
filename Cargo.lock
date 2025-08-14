@@ -359,7 +359,6 @@ dependencies = [
  "flatbuffers",
  "flatc-rust",
  "futures",
- "fxhash",
  "libc",
  "lightningcss",
  "lru",
