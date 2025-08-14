@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <main className="p-20000 md:p-8 bg-gray-50 min-h-screen text-gray-800">
+    <main className="p-5 md:p-8 bg-gray-50 min-h-screen text-gray-800">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-4xl md:text-5xl font-bold">
           Dx Styles Container Queries
