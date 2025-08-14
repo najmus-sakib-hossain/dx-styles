@@ -15,10 +15,13 @@ fn main() {
     let mut interner = ClassInterner::new();
     // Create 100 class names with some prefixes
     let mut ids = Vec::new();
-    for i in 0..2 {
+    for i in 0..1000 {
         let cn = format!("sm:btn-{}", i);
         ids.push(interner.intern(&cn));
     }
+
+    // Prewarm engine rules for all interned names.
+    engine.prewarm(&interner);
 
     // Warm up cache
     let _ = engine.generate_css_for_ids(&ids, &interner);

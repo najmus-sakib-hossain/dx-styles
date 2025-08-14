@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 use rayon::prelude::*;
 use std::fs;
 use std::num::NonZeroUsize;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::sync::Arc;
 
 mod styles_generated {
@@ -25,6 +25,8 @@ pub struct StyleEngine {
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
     css_cache: Mutex<LruCache<u32, Arc<String>>>,
+    // Optional precomputed rules indexed by interner id. Built at startup via `prewarm`.
+    precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
 
 impl StyleEngine {
@@ -101,7 +103,28 @@ impl StyleEngine {
             container_queries,
             // Larger cache to reduce recomputation frequency during dev hot-reloads.
             css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
+            precomputed: RwLock::new(None),
         })
+    }
+
+    /// Precompute CSS rules for all interned class names.
+    /// Should be called after the interner has been populated with all known names.
+    pub fn prewarm(&self, interner: &crate::interner::ClassInterner) {
+        let len = interner.len();
+        let mut vec: Vec<Option<Arc<String>>> = Vec::with_capacity(len);
+        for id in 0..len {
+            let id_u32 = id as u32;
+            let raw = interner.get(id_u32).to_string();
+            let esc = interner.escaped(id_u32).to_string();
+            if let Some(css) = self.compute_css_from_raw_and_escaped(&raw, &esc) {
+                vec.push(Some(Arc::new(css)));
+            } else {
+                vec.push(None);
+            }
+        }
+        let arc = Arc::new(vec);
+        let mut w = self.precomputed.write().unwrap();
+        *w = Some(arc);
     }
 
     // Internal: compute CSS without consulting / mutating the cache (allocation-light)
@@ -241,7 +264,21 @@ impl StyleEngine {
     }
 
     pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<Arc<String>> {
-        // Preallocate result slots to avoid sorting and intermediate vectors.
+        // Fast path: if precomputed table exists, use direct indexed Arc clones.
+        if let Some(pre) = self.precomputed.read().unwrap().as_ref() {
+            let mut out: Vec<Arc<String>> = Vec::with_capacity(ids.len());
+            for &id in ids {
+                let idx = id as usize;
+                if idx < pre.len() {
+                    if let Some(a) = &pre[idx] {
+                        out.push(Arc::clone(a));
+                    }
+                }
+            }
+            return out;
+        }
+
+        // Fallback: existing cache + parallel compute path.
         let mut result_slots: Vec<Option<Arc<String>>> = vec![None; ids.len()];
         let mut misses: Vec<(usize, u32)> = Vec::new();
 
@@ -257,7 +294,6 @@ impl StyleEngine {
         }
 
         if !misses.is_empty() {
-            // Pre-extract raw and escaped strings from interner (single-threaded) then compute in parallel.
             let miss_sources: Vec<(usize, u32, String, String)> = misses
                 .iter()
                 .map(|(idx, id)| (*idx, *id, interner.get(*id).to_string(), interner.escaped(*id).to_string()))
@@ -265,7 +301,7 @@ impl StyleEngine {
 
             let computed: Vec<(usize, Arc<String>)> = miss_sources
                 .into_par_iter()
-                .filter_map(|(idx, id, raw, esc)| {
+                .filter_map(|(idx, _id, raw, esc)| {
                     self.compute_css_from_raw_and_escaped(&raw, &esc).map(|css| (idx, Arc::new(css)))
                 })
                 .collect();
@@ -277,11 +313,7 @@ impl StyleEngine {
             }
         }
 
-        // Collect and return only generated rules (skip ids that produced no CSS).
-        result_slots
-            .into_iter()
-            .filter_map(|opt| opt)
-            .collect()
+        result_slots.into_iter().filter_map(|opt| opt).collect()
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {
