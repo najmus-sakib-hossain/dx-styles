@@ -551,10 +551,17 @@ impl StyleEngine {
                 }
                 else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) { out.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", v, build_block(selector, decls))); } }
                 else if let Some(rest) = cond.strip_prefix("self:child-count>") {
-                    // Translate to :has pseudo with nth-child threshold (approximation)
+                    // Exact >= threshold semantics using :has(> :nth-last-child(n+X):first-child)
                     if let Ok(threshold) = rest.parse::<usize>() {
-                        let hashed = format!("{}:has(> :nth-child({}))", selector, threshold);
-                        out.push_str(&build_block(&hashed, decls)); out.push('\n');
+                        if threshold > 0 {
+                            // CSS pattern to match parent with at least threshold children:
+                            // :has(> :nth-last-child(n+THRESHOLD):first-child)
+                            let hashed = format!("{}:has(> :nth-last-child(n+{}):first-child)", selector, threshold);
+                            out.push_str(&build_block(&hashed, decls)); out.push('\n');
+                        } else {
+                            // threshold 0 => always applies, fall back to base selector wrapper
+                            out.push_str(&build_block(selector, decls)); out.push('\n');
+                        }
                     }
                 }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {

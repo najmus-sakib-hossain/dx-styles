@@ -177,10 +177,11 @@ impl ClassNameVisitor {
                         }
                     }
                 } else if ident.starts_with('~') {
-                    // Fluid scaling ~prop(min@bp, max@bp)
+                    // Fluid scaling ~prop(min@bp, max@bp) ; shorthand ~text => font-size
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
-                        let prop = ident.trim_start_matches('~');
+                        let raw_prop = ident.trim_start_matches('~');
+                        let prop = if raw_prop == "text" { "font-size" } else { raw_prop };
                         let pieces: Vec<&str> = inner.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
                         if pieces.len() >= 2 {
                             let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.trim().to_string(); let bp = parts.next().unwrap_or("base").trim().to_string(); Some((v,bp)) };
@@ -275,7 +276,8 @@ impl ClassNameVisitor {
             for (_, toks) in c.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
             expand_component_tokens(&mut c.base);
             // If composite has only simple base tokens and no advanced features we can still return raw tokens for backward compatibility.
-            if c.child_rules.is_empty() && c.state_rules.is_empty() && c.data_attr_rules.is_empty() && c.conditional_blocks.is_empty() && c.extra_raw.is_empty() && c.animations.is_empty() {
+            let has_fluid = c.base.iter().any(|t| t.starts_with("fluid:"));
+            if !has_fluid && c.child_rules.is_empty() && c.state_rules.is_empty() && c.data_attr_rules.is_empty() && c.conditional_blocks.is_empty() && c.extra_raw.is_empty() && c.animations.is_empty() {
                 out.extend(c.base);
             } else {
                 let class_name = composites::get_or_create_full(c);
