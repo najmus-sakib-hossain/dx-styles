@@ -38,13 +38,16 @@ fn normalize_generated_css(css: &str) -> String {
     // 4. Remove stray top-level conditional container group rules using existing structural scan.
     out = strip_top_level_container_rules(&out);
 
-    // 5. Final sanity: attempt parse; if it fails, return original css (fail-safe) so we don't emit corrupt CSS.
-    if let Ok(parsed) = lightningcss::stylesheet::StyleSheet::parse(&out, lightningcss::stylesheet::ParserOptions::default()) {
-        // Re-print to normalize formatting lightly (non-minified path only).
+    // 5. Final sanity: attempt parse / re-print; if it fails, continue with current string.
+    // Use a cloned copy to avoid borrow issues when replacing `out`.
+    if let Ok(parsed) = lightningcss::stylesheet::StyleSheet::parse(&out.clone(), lightningcss::stylesheet::ParserOptions::default()) {
         if let Ok(res) = parsed.to_css(lightningcss::stylesheet::PrinterOptions::default()) {
-            return res.code;
+            out = res.code;
         }
     }
+
+    // 6. Remove orphan selector lines (e.g. stray `.dark` left after pruning its grouped block).
+    out = remove_orphan_selectors(&out);
     out
 }
 
@@ -87,6 +90,21 @@ fn remove_selector_blocks<F: Fn(&str) -> bool>(input: &str, predicate: F) -> Str
         i += 1;
     }
     out
+}
+
+// Remove lines that are just a selector without an opening brace (likely left after earlier pruning).
+fn remove_orphan_selectors(input: &str) -> String {
+    let mut cleaned = String::with_capacity(input.len());
+    for line in input.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('.') && !trimmed.contains('{') && !trimmed.is_empty() {
+            // Skip orphan selector line
+            continue;
+        }
+        cleaned.push_str(line);
+        cleaned.push('\n');
+    }
+    cleaned
 }
 
 // Remove rules beginning with .?@container... that occur outside any @container at-rule.
@@ -285,4 +303,36 @@ pub fn append_new_classes_ids(
     }
     writer.write_all(b"\n").expect("write trailing newline");
     writer.flush().expect("flush append");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removes_orphan_dark_selector() {
+        let input = ".font-bold { font-weight:700; }\n.dark \n.other{a:b;}";
+        let out = normalize_generated_css(input);
+        assert!(!out.contains("\n.dark\n"), "orphan .dark selector should be removed: {out}");
+    }
+
+    #[test]
+    fn removes_hashed_block() {
+        let input = ".dx-class-12345678{color:red;}\n.ok{a:b;}";
+        let out = normalize_generated_css(input);
+        assert!(!out.contains("dx-class-12345678"));
+        assert!(out.contains(".ok"));
+    }
+
+    #[test]
+    fn removes_top_level_container_rule() {
+        let input = ".?@container>640px(foo){color:red;}\n@container (min-width:640px){.?@container>640px(foo){color:blue;}}";
+        let out = normalize_generated_css(input);
+        // Should keep only the nested one
+        assert!(out.contains("@container"));
+        // Top-level occurrence should be gone
+        let first_idx = out.find(".?@container>640px(foo)");
+        let nested_idx = out.rfind(".?@container>640px(foo)");
+        assert_eq!(first_idx, nested_idx, "only nested container rule should remain: {out}");
+    }
 }
