@@ -2,7 +2,6 @@ use crate::engine::StyleEngine;
 use crate::interner::ClassInterner;
 use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use rayon::prelude::*;
-use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -33,10 +32,8 @@ fn normalize_generated_css(css: &str) -> String {
         VARIANTS.iter().any(|v| sel.starts_with(v))
     });
 
-    // 3. Simplify local component groups ._name(...){ -> ._name { ... }
-    if let Ok(re_local) = Regex::new(r"\._([a-zA-Z0-9_-]+)\\\([^{}]*?\\\)\s*\{") {
-        out = re_local.replace_all(&out, |caps: &regex::Captures| format!("._{} {{", &caps[1])).into_owned();
-    }
+    // 3. Simplify local component groups ._name(...){ -> ._name { ... } (manual scan, no regex)
+    out = simplify_local_component_groups(&out);
 
     // 4. Remove stray top-level conditional container group rules using existing structural scan.
     out = strip_top_level_container_rules(&out);
@@ -61,10 +58,11 @@ fn normalize_generated_css(css: &str) -> String {
 // Expand selectors of the synthetic form .?@container>SIZE(token\ token2\ ... ) found inside an @container at-rule
 // into a comma-delimited list of the inner tokens as standalone class selectors.
 fn expand_container_group_selectors(input: &str) -> String {
-    if !input.contains("?@container>") { return input.to_string(); }
+    // Don't early-return; pattern may be escaped already (e.g. .\?\@container>) after sanitization.
     let bytes = input.as_bytes();
     let mut i = 0usize;
     let mut out = String::with_capacity(input.len());
+    let mut last_copied = 0usize;
     while i < bytes.len() {
         if bytes[i] == b'.' {
             let sel_start = i;
@@ -118,9 +116,8 @@ fn expand_container_group_selectors(input: &str) -> String {
                                 inner.split_whitespace().filter(|t| !t.is_empty()).collect()
                             };
                             if !raw_tokens.is_empty() {
-                                out.push_str(&input[..sel_start]); // content up to selector
-                                // Ensure we haven't duplicated earlier content
-                                if sel_start > 0 { let already = out.len(); if already < sel_start { out.push_str(&input[out.len()..sel_start]); } }
+                                // Copy any intermediate content not yet copied
+                                if sel_start > last_copied { out.push_str(&input[last_copied..sel_start]); }
                                 let mut first = true;
                                 for tok in raw_tokens {
                                     if !first { out.push_str(", "); } else { first = false; }
@@ -137,6 +134,7 @@ fn expand_container_group_selectors(input: &str) -> String {
                                 out.push_str(" {");
                                 // Advance i to after '{'
                                 i = after + 1; // position after '{'
+                                last_copied = i;
                                 continue; // skip default copy for consumed slice
                             }
                         }
@@ -144,11 +142,9 @@ fn expand_container_group_selectors(input: &str) -> String {
                 }
             }
         }
-        // Default copy path
-        out.push(bytes[i] as char);
         i += 1;
     }
-    if i < bytes.len() { out.push_str(&input[i..]); }
+    if last_copied < input.len() { out.push_str(&input[last_copied..]); }
     out
 }
 
@@ -184,21 +180,44 @@ fn sanitize_class_selectors(input: &str) -> String {
                     let mut needs_change = false;
                     let mut sanitized = String::with_capacity(ident.len() + 8);
                     let mut chars = ident.chars().peekable();
+                    let mut char_index = 0usize;
                     while let Some(ch) = chars.next() {
-                        if ch == '\\' { // preserve existing escape and next char verbatim
+                        if ch == '\\' { // keep existing escape and next char
                             sanitized.push(ch);
                             if let Some(nc) = chars.next() { sanitized.push(nc); }
+                            char_index += 1;
                             continue;
                         }
                         let valid = matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_');
-                        if !valid {
+                        if !valid || (char_index == 0 && ch.is_ascii_digit()) {
                             needs_change = true;
                             sanitized.push('\\');
                         }
                         sanitized.push(ch);
+                        char_index += 1;
+                    }
+                    // Hyphen-digit start needs escaping of the digit per CSS identifier rules
+                    if ident.starts_with('-') {
+                        if let Some(second) = ident.chars().nth(1) {
+                            if second.is_ascii_digit() && !ident.starts_with("-\\") {
+                                needs_change = true;
+                                // Insert escape after hyphen.
+                                let mut rebuilt = String::with_capacity(sanitized.len() + 2);
+                                // sanitized already mirrors ident (with escapes). Find first occurrence of '-' followed by second
+                                let mut done = false;
+                                let mut iter = sanitized.chars().peekable();
+                                while let Some(c) = iter.next() {
+                                    rebuilt.push(c);
+                                    if !done && c == '-' {
+                                        if let Some(&peek) = iter.peek() { if peek == second { rebuilt.push('\\'); done = true; } }
+                                    }
+                                }
+                                sanitized = rebuilt;
+                            }
+                        }
                     }
                     if needs_change {
-                        out.push_str(&input[last_written..i+1]); // include the '.'
+                        out.push_str(&input[last_written..i+1]); // include '.'
                         out.push_str(&sanitized);
                         last_written = j;
                     }
@@ -211,6 +230,57 @@ fn sanitize_class_selectors(input: &str) -> String {
     }
     if last_written == 0 { return input.to_string(); }
     out.push_str(&input[last_written..]);
+    out
+}
+
+// Manual simplification: ._name\(tokens\) { -> ._name {
+fn simplify_local_component_groups(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    let mut last_copy = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'.' && i + 2 < bytes.len() && bytes[i+1] == b'_' {
+            let start_sel = i;
+            let mut j = i + 2;
+            while j < bytes.len() {
+                let c = bytes[j];
+                if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { j += 1; continue; }
+                break;
+            }
+            // Expect escaped paren sequence \(
+            if j + 1 < bytes.len() && bytes[j] == b'\\' && bytes[j+1] == b'(' {
+                j += 2; // skip \(
+                // scan until closing \)
+                while j + 1 < bytes.len() {
+                    if bytes[j] == b'\\' {
+                        if j + 1 < bytes.len() && bytes[j+1] == b')' { j += 2; break; }
+                        j += 2; continue;
+                    }
+                    // safety break if unexpected block start
+                    if bytes[j] == b'{' { break; }
+                    j += 1;
+                }
+                // skip whitespace
+                let mut k = j;
+                while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') { k += 1; }
+                if k < bytes.len() && bytes[k] == b'{' {
+                    // perform replacement
+                    out.push_str(&input[last_copy..start_sel]);
+                    // copy ._name
+                    out.push_str(&input[start_sel..start_sel + 2]); // ._
+                    out.push_str(&input[start_sel + 2 .. start_sel + 2 + (j - (start_sel + 2) - 2)]); // identifier minus grouping
+                    out.push_str(" {");
+                    i = k + 1; // move past '{'
+                    last_copy = i;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    if last_copy == 0 { return input.to_string(); }
+    out.push_str(&input[last_copy..]);
     out
 }
 
