@@ -222,9 +222,13 @@ impl StyleEngine {
             }
             selector.push_str(&pseudo_classes);
             let mut blocks = String::new();
-            if css.contains('\n') && css.contains("BASE|") {
-                // multi-block encoded composite
-                for line in css.lines() {
+            // Detect encoded composite even if only single line (no \n present)
+            let is_encoded_composite = css.contains("BASE|") || css.contains("STATE|") || css.contains("CHILD|") || css.contains("COND|") || css.contains("DATA|") || css.contains("RAW|") || css.contains("ANIM|");
+            if is_encoded_composite {
+                // Split into logical lines; if there are no newlines, treat entire string as one line
+                let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css.as_str()] };
+                for line in lines {
+                    if line.is_empty() { continue; }
                     if line.starts_with("BASE|") {
                         let decls = &line[5..];
                         blocks.push_str(&build_block(&selector, decls));
@@ -244,16 +248,18 @@ impl StyleEngine {
                             if let Some(rest) = cond.strip_prefix("@container>") {
                                 blocks.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", rest, build_block(&selector, decls)));
                             } else if let Some(bp) = cond.strip_prefix("screen:") {
-                                // map screen key to value using screens map
                                 if let Some(val) = self.screens.get(bp) {
                                     blocks.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", val, build_block(&selector, decls)));
                                 }
                             }
                         }
                     } else if line.starts_with("ANIM|") {
-                        // animstage|stage|props+props
-                        // aggregate stages into keyframes (skip here - placeholder)
-                        // TODO implement aggregation
+                        // TODO: implement animation keyframe aggregation
+                    } else if line.starts_with("RAW|") {
+                        // Raw block passthrough
+                        let raw = &line[4..];
+                        blocks.push_str(raw);
+                        blocks.push('\n');
                     }
                 }
                 if blocks.ends_with('\n') { blocks.pop(); }
@@ -324,13 +330,18 @@ impl StyleEngine {
             selector.push_str(escaped);
             selector.push_str(&pseudo_classes);
             let mut blocks = String::new();
-        if css.contains('\n') && css.contains("BASE|") {
-                for line in css.lines() {
+        let is_encoded_composite = css.contains("BASE|") || css.contains("STATE|") || css.contains("CHILD|") || css.contains("COND|") || css.contains("DATA|") || css.contains("RAW|") || css.contains("ANIM|");
+        if is_encoded_composite {
+                let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css.as_str()] };
+                for line in lines {
+                    if line.is_empty() { continue; }
                     if line.starts_with("BASE|") { let decls=&line[5..]; blocks.push_str(&build_block(&selector, decls)); blocks.push('\n'); }
                     else if line.starts_with("STATE|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{}:{}", selector,p[1]), p[2])); blocks.push('\n'); }}
                     else if line.starts_with("CHILD|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{} > {}", selector,p[1]), p[2])); blocks.push('\n'); }}
                     else if line.starts_with("DATA|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{}[data-{}]", selector,p[1]), p[2])); blocks.push('\n'); }}
-            else if line.starts_with("COND|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { if let Some(rest)=p[1].strip_prefix("@container>") { blocks.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", rest, build_block(&selector,p[2]))); } else if let Some(bp)=p[1].strip_prefix("screen:") { if let Some(val)=self.screens.get(bp) { blocks.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", val, build_block(&selector,p[2]))); } } }}
+                    else if line.starts_with("COND|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { if let Some(rest)=p[1].strip_prefix("@container>") { blocks.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", rest, build_block(&selector,p[2]))); } else if let Some(bp)=p[1].strip_prefix("screen:") { if let Some(val)=self.screens.get(bp) { blocks.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", val, build_block(&selector,p[2]))); } } }}
+                    else if line.starts_with("ANIM|") { /* TODO */ }
+                    else if line.starts_with("RAW|") { let raw=&line[4..]; blocks.push_str(raw); blocks.push('\n'); }
                 }
                 if blocks.ends_with('\n') { blocks.pop(); }
             } else {

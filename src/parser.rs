@@ -135,19 +135,31 @@ impl ClassNameVisitor {
                     if let Some(c) = &mut pending { c.conditional_blocks.push((ident[1..].to_string(), inner_tokens)); }
                 } else if ident.starts_with('~') {
                     // Fluid scaling ~prop(min@sm, max@lg)
-                    // Parse tokens of form value@breakpoint
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let prop = ident.trim_start_matches('~');
                         if inner_tokens.len() >= 2 {
                             let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.to_string(); let bp = parts.next().unwrap_or("base").to_string(); Some((v,bp)) };
                             if let (Some((min_v, min_bp)), Some((max_v, max_bp))) = (parse_part(&inner_tokens[0]), parse_part(&inner_tokens[1])) {
-                                // Create clamp formula placeholder token
-                                let token = format!("fluid:{}:{}:{}:{}", prop, min_v, min_bp, max_v); // simplified
+                                let token = format!("fluid:{}:{}:{}:{}:{}", prop, min_v, min_bp, max_v, max_bp);
                                 c.base.push(token);
-                                let _ = max_bp; // reserved for extended logic
                             }
                         }
+                    }
+                } else if ident == "mesh" {
+                    // mesh gradient: normalize inner to colors list
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        let mut colors: Vec<String> = Vec::new();
+                        let mut buf = String::new();
+                        for ch in inner.chars() {
+                            match ch {
+                                '[' | ']' | ',' => { if !buf.trim().is_empty() { colors.push(buf.trim().trim_matches(']').trim_matches('[').to_string()); } buf.clear(); },
+                                _ => buf.push(ch),
+                            }
+                        }
+                        if !buf.trim().is_empty() { colors.push(buf.trim().to_string()); }
+                        if !colors.is_empty() { c.base.push(format!("gradient:mesh:{}", colors.join("+"))); }
                     }
                 } else if ident.starts_with('$') {
                     // Generated single-purpose utility -> collapse to composite hashed class immediately
@@ -181,7 +193,14 @@ impl ClassNameVisitor {
                 }
             } else {
                 // plain token
-                if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
+                if ident.starts_with('_') {
+                    // scoped component definition like _highlight(a b)
+                    if !self.components.contains_key(ident) { /* do not persist globally */ }
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.base.push(ident.to_string()); }
+                } else if ident == "forwards" {
+                    ensure(&mut pending); if let Some(c)= &mut pending { c.base.push("animfill:forwards".to_string()); }
+                } else if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
                 else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); } }
             }
         }
