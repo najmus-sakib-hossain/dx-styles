@@ -191,6 +191,7 @@ impl StyleEngine {
 
         let mut media_queries: SmallVec<[String; 4]> = SmallVec::new();
         let mut pseudo_classes = String::new();
+        let mut wrappers: SmallVec<[String; 2]> = SmallVec::new();
 
         if !prefix_segment.is_empty() {
             for part in prefix_segment.split(':') {
@@ -199,7 +200,7 @@ impl StyleEngine {
                 } else if let Some(cq_value) = self.container_queries.get(part) {
                     media_queries.push(format!("@container (min-width: {})", cq_value));
                 } else if let Some(state_value) = self.states.get(part) {
-                    pseudo_classes.push_str(state_value);
+                    if state_value.contains('&') { wrappers.push(state_value.to_string()); } else { pseudo_classes.push_str(state_value); }
                 }
             }
         }
@@ -213,17 +214,26 @@ impl StyleEngine {
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
 
-        core_css.map(|css| {
+        core_css.map(|mut css| {
+            // sanitize duplicate trailing semicolons & invalid combined transform scale declaration pattern
+            css = sanitize_declarations(&css);
             let mut selector = String::from(".");
             for ch in class_name.chars() {
                 match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
             }
             selector.push_str(&pseudo_classes);
-            let mut css_body = String::new();
-            css_body.push_str(&selector);
-            css_body.push_str(" {\n  ");
-            css_body.push_str(&css);
-            css_body.push_str(";\n}");
+            let mut blocks = String::new();
+            if wrappers.is_empty() {
+                blocks.push_str(&build_block(&selector, &css));
+            } else {
+                for w in &wrappers {
+                    let replaced = w.replace('&', &selector);
+                    blocks.push_str(&build_block(&replaced, &css));
+                    blocks.push('\n');
+                }
+                if blocks.ends_with('\n') { blocks.pop(); }
+            }
+            let mut css_body = blocks;
             for mq in media_queries.iter().rev() {
                 let mut wrapped = String::new();
                 wrapped.push_str(mq);
@@ -251,8 +261,9 @@ impl StyleEngine {
             ("", class_name)
         };
 
-        let mut media_queries: SmallVec<[String; 4]> = SmallVec::new();
-        let mut pseudo_classes = String::new();
+    let mut media_queries: SmallVec<[String; 4]> = SmallVec::new();
+    let mut pseudo_classes = String::new();
+    let mut wrappers: SmallVec<[String; 2]> = SmallVec::new();
 
         if !prefix_segment.is_empty() {
             for part in prefix_segment.split(':') {
@@ -261,7 +272,7 @@ impl StyleEngine {
                 } else if let Some(cq_value) = self.container_queries.get(part) {
                     media_queries.push(format!("@container (min-width: {})", cq_value));
                 } else if let Some(state_value) = self.states.get(part) {
-                    pseudo_classes.push_str(state_value);
+                    if state_value.contains('&') { wrappers.push(state_value.to_string()); } else { pseudo_classes.push_str(state_value); }
                 }
             }
         }
@@ -275,27 +286,29 @@ impl StyleEngine {
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
 
-        core_css.map(|css| {
+        core_css.map(|mut css| {
+            css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
             selector.push('.');
             selector.push_str(escaped);
             selector.push_str(&pseudo_classes);
-
-            let mut css_body = String::with_capacity(selector.len() + css.len() + 16);
-            css_body.push_str(&selector);
-            css_body.push_str(" {\n  ");
-            css_body.push_str(&css);
-            css_body.push_str(";\n}");
-
+            let mut blocks = String::new();
+            if wrappers.is_empty() {
+                blocks.push_str(&build_block(&selector, &css));
+            } else {
+                for w in &wrappers {
+                    let replaced = w.replace('&', &selector);
+                    blocks.push_str(&build_block(&replaced, &css));
+                    blocks.push('\n');
+                }
+                if blocks.ends_with('\n') { blocks.pop(); }
+            }
+            let mut css_body = blocks;
             for mq in media_queries.iter().rev() {
-                let mut wrapped = String::with_capacity(mq.len() + css_body.len() + 8);
+                let mut wrapped = String::new();
                 wrapped.push_str(mq);
                 wrapped.push_str(" {\n");
-                for line in css_body.lines() {
-                    wrapped.push_str("  ");
-                    wrapped.push_str(line);
-                    wrapped.push('\n');
-                }
+                for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
                 wrapped.push('}');
                 css_body = wrapped;
             }
@@ -326,6 +339,8 @@ impl StyleEngine {
         let mut css = String::new();
         if !decls.is_empty() {
             for (i, d) in decls.iter().enumerate() { if i>0 { css.push(' ');} css.push_str(d.trim_end_matches(';')); css.push(';'); }
+            // remove trailing semicolons
+            while css.ends_with(';') { css.pop(); }
         }
         // store extended blocks temporarily; engine::compute_css* will wrap base declarations inside selector.
         // We append extra blocks after returning by embedding a marker. Simpler: return combined declarations only for now.
@@ -472,5 +487,47 @@ impl StyleEngine {
         }
         None
     }
+}
+
+// Helpers ------------------------------------------------------------------
+
+fn build_block(selector: &str, declarations: &str) -> String {
+    let mut s = String::new();
+    s.push_str(selector);
+    s.push_str(" {\n  ");
+    // ensure single trailing semicolon inside block
+    let mut decl = declarations.trim().trim_end_matches(';').to_string();
+    // split combined declarations separated by ';' and join with ';\n  ' for readability
+    if decl.contains(';') {
+        let parts: Vec<&str> = decl.split(';').filter(|p| !p.trim().is_empty()).collect();
+        s.push_str(&parts.join(";\n  "));
+        s.push_str(";\n}");
+    } else {
+        s.push_str(&decl);
+        s.push_str(";\n}");
+    }
+    s
+}
+
+fn sanitize_declarations(input: &str) -> String {
+    let mut out = input.trim().to_string();
+    // collapse multiple semicolons
+    while out.ends_with(";;") { out.pop(); }
+    // fix combined transform scale pattern '--transform-scale-x, --transform-scale-y: VALUE'
+    if let Some(pos) = out.find("--transform-scale-x, --transform-scale-y:") {
+        // capture value after colon
+        if let Some(val_start) = out[pos..].find(':') { let val_start_abs = pos + val_start + 1; if val_start_abs < out.len() {
+            let value = out[val_start_abs..].split(';').next().unwrap_or("").trim();
+            let replacement = format!("--transform-scale-x: {v}; --transform-scale-y: {v}", v=value);
+            // remove the original segment up to first semicolon
+            if let Some(end_seg) = out[val_start_abs..].find(';') {
+                let end_abs = val_start_abs + end_seg + 1; // include semicolon
+                out.replace_range(pos..end_abs, &replacement);
+            } else {
+                out.replace_range(pos..out.len(), &replacement);
+            }
+        }}
+    }
+    out
 }
 

@@ -1,103 +1,168 @@
-.font-bold {
-  font-weight: 700;
-}
-
-.text-gray-800 {
-  color: oklch(0.278 0.033 256.848);
-}
-
-.w-full {
-  width: 100%;
-}
-
-.duration-300 {
-  transition-duration: 300ms;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.to\:opacity-100 {
-  opacity: 1;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-@media (min-width: 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.text-lg {
-  font-size: 1.125rem;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
 .w-screen {
   width: 100vw;
 }
 
-.border-dashed {
-  border-style: dashed;
+.shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-.max-w-5xl {
-  max-width: 64rem;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.text-blue-900 {
-  color: oklch(0.379 0.146 265.522);
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.p-4 {
-  padding: 1rem;
+.text-green-900 {
+  color: oklch(0.393 0.095 152.535);
 }
 
 .text-gray-600 {
   color: oklch(0.446 0.03 256.802);
 }
 
-.animate\:1s {
-  animation-name: dx-anim-782ee2f3ad223990; animation-duration: 1s; animation-delay: 0s;
+.text-lg {
+  font-size: 1.125rem;
 }
 
-.from\:opacity-0 {
-  opacity: 0;
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.backdrop-blur-lg {
+  backdrop-filter: blur(16px);
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.rounded-lg {
+  border-radius: 0.5rem;
 }
 
 .max-w-full {
   max-width: 100%;
 }
 
-.mt-2 {
-  margin-top: 0.5rem;
+.text-gray-800 {
+  color: oklch(0.278 0.033 256.848);
+}
+
+.bg-green-200 {
+  background-color: oklch(0.925 0.084 155.995);
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.dx-c-655b572d {
+  padding: 2rem;
+   backdrop-filter: blur(16px);
+   border-radius: 0.75rem;
+   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+   margin-top: 2rem;
+}
+
+.data\:loading\:animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate\:1s {
+  animation-name: dx-anim-782ee2f3ad223990;
+   animation-duration: 1s;
+   animation-delay: 0s;
+}
+
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.hover\:bg-blue-600:hover {
+  background-color: oklch(0.546 0.245 262.881);
+}
+
+.text-yellow-900 {
+  color: oklch(0.421 0.095 57.708);
+}
+
+.w-32 {
+  width: 8rem;
+}
+
+.focus\:ring-blue-300:focus {
+  box-shadow: 0 0 0 2px #93c5fd;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.bg-purple-500 {
+  background-color: oklch(0.627 0.265 303.9);
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+.text-blue-900 {
+  color: oklch(0.379 0.146 265.522);
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.hover\:shadow-lg:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.focus\:outline-none:focus {
+  outline: 2px solid transparent;
+   outline-offset: 2px;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.dark .dark\:text-gray-200 {
+  color: oklch(0.928 0.006 264.531);
+}
+
+.data\:loading\:bg-gray-400 {
+  background-color: oklch(0.707 0.022 261.325);
+}
+
+.rounded-xl {
+  border-radius: 0.75rem;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.data\:loading\:cursor-wait {
+  cursor: wait;
+}
+
+.bg-yellow-200 {
+  background-color: oklch(0.945 0.129 101.54);
+}
+
+.bg-blue-500 {
+  background-color: oklch(0.623 0.214 259.815);
+}
+
+.p-8 {
+  padding: 2rem;
 }
 
 @media (min-width: 768px) {
@@ -106,114 +171,59 @@
   }
 }
 
-.data\:loading\:cursor-wait {
-  cursor: wait;
-}
-
-.dx-c-655b572d {
-  padding: 2rem; backdrop-filter: blur(16px); border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); margin-top: 2rem;;
-}
-
-.dark\:text-gray-200.dark & {
-  color: oklch(0.928 0.006 264.531);
-}
-
-.dx-c-e3e64159 {
-  outline: 2px solid transparent; outline-offset: 2px; box-shadow: 0 0 0 2px #8b5cf6;;
-}
-
-.bg-blue-500 {
-  background-color: oklch(0.623 0.214 259.815);
+.dark .dark\:text-gray-400 {
+  color: oklch(0.707 0.022 261.325);
 }
 
 .container {
   width: 100%;
 }
 
-.hover\:scale-110:hover {
-  --transform-scale-x, --transform-scale-y: 1.1;
-}
-
-.font-semibold {
-  font-weight: 600;
-}
-
-.p-8 {
-  padding: 2rem;
-}
-
-.focus\:ring-blue-300:focus {
-  box-shadow: 0 0 0 2px #93c5fd;
-}
-
-.data\:loading\:animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.text-yellow-900 {
-  color: oklch(0.421 0.095 57.708);
-}
-
-.dark\:text-gray-400.dark & {
-  color: oklch(0.707 0.022 261.325);
-}
-
-.hover\:bg-blue-600:hover {
-  background-color: oklch(0.546 0.245 262.881);
-}
-
-.data\:loading\:bg-gray-400 {
-  background-color: oklch(0.707 0.022 261.325);
-}
-
-.hover\:shadow-lg:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-.w-32 {
-  width: 8rem;
-}
-
-.text-2xl {
-  font-size: 1.5rem;
-}
-
-.bg-green-200 {
-  background-color: oklch(0.925 0.084 155.995);
-}
-
-.rounded-xl {
-  border-radius: 0.75rem;
-}
-
 .mb-4 {
   margin-bottom: 1rem;
 }
 
-.shadow-lg {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+.from\:opacity-0 {
+  opacity: 0;
+}
+
+@media (min-width: 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+
+.dx-c-e3e64159 {
+  outline: 2px solid transparent;
+   outline-offset: 2px;
+   box-shadow: 0 0 0 2px #8b5cf6;
+}
+
+.w-full {
+  width: 100%;
 }
 
 .bg-blue-200 {
   background-color: oklch(0.882 0.059 254.128);
 }
 
-.text-green-900 {
-  color: oklch(0.393 0.095 152.535);
+.to\:opacity-100 {
+  opacity: 1;
 }
 
-.focus\:outline-none:focus {
-  outline: 2px solid transparent; outline-offset: 2px;
+.duration-300 {
+  transition-duration: 300ms;
 }
 
-.backdrop-blur-lg {
-  backdrop-filter: blur(16px);
+.p-4 {
+  padding: 1rem;
 }
 
-.bg-purple-500 {
-  background-color: oklch(0.627 0.265 303.9);
+.hover\:scale-110:hover {
+  --transform-scale-x: 1.1;
+   --transform-scale-y: 1.1;
 }
 
-.bg-yellow-200 {
-  background-color: oklch(0.945 0.129 101.54);
+.text-4xl {
+  font-size: 2.25rem;
 }
