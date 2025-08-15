@@ -81,6 +81,7 @@ pub fn get(class_name: &str) -> Option<Composite> {
     reg.data.get(class_name).cloned()
 }
 
+#[allow(dead_code)]
 pub fn iter_all() -> Vec<(String, Composite)> {
     let reg = REGISTRY.read().unwrap();
     reg.data.iter().map(|(k,v)| (k.clone(), v.clone())).collect()
