@@ -19,7 +19,17 @@ impl ClassInterner {
         self.strings.push(s.to_string());
         let mut esc = String::with_capacity(s.len() + 4);
         for ch in s.chars() {
-            match ch { ':' => esc.push_str("\\:"), '@' => esc.push_str("\\@"), _ => esc.push(ch) }
+            match ch {
+                ':' => esc.push_str("\\:"),
+                '@' => esc.push_str("\\@"),
+                '(' => esc.push_str("\\("),
+                ')' => esc.push_str("\\)"),
+                ' ' => esc.push_str("\\ "),
+                '/' => esc.push_str("\\/"),
+                '\\' => esc.push_str("\\\\"),
+                // we can add more escaping here if needed for other special chars
+                _ => esc.push(ch),
+            }
         }
         self.escaped.push(esc);
         self.map.insert(self.strings[id as usize].clone(), id);

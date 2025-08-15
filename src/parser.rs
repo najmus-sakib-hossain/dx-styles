@@ -52,7 +52,7 @@ impl ClassNameVisitor {
         let cqs: HashSet<&str> = CQS.iter().copied().collect();
 
         let mut out = Vec::new();
-        let mut pending: Option<Composite> = None;
+    let mut pending: Option<Composite> = None;
         let mut local_components: HashMap<String, Vec<String>> = HashMap::new();
         let ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
         let mut i = 0usize;
@@ -79,6 +79,7 @@ impl ClassNameVisitor {
                 }
                 let inner_end = i.saturating_sub(1);
                 let inner = &raw[inner_start..inner_end];
+                // Grouping expression substring (raw[start..i]) currently unused after refactor
                 let mut nested_children: Vec<(String, Vec<String>)> = Vec::new();
                 let _simple_inner_source = inner.to_string();
                 {
@@ -207,6 +208,31 @@ impl ClassNameVisitor {
                     }
                     if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
                 }
+
+                // Per-group finalization: emit a composite for this grouping expression now.
+                if let Some(mut c_emit) = pending.take() {
+                    let expand_component_tokens = |tokens: &mut Vec<String>| {
+                        let mut expanded: Vec<String> = Vec::new();
+                        for t in tokens.iter() {
+                            if let Some(name) = t.strip_prefix('$') {
+                                if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                                if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                            } else if let Some(name) = t.strip_prefix('_') {
+                                if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                                if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                            }
+                            expanded.push(t.clone());
+                        }
+                        *tokens = expanded;
+                    };
+                    for (_, toks) in c_emit.state_rules.iter_mut() { expand_component_tokens(toks); }
+                    for (_, toks) in c_emit.child_rules.iter_mut() { expand_component_tokens(toks); }
+                    for (_, toks) in c_emit.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
+                    for (_, toks) in c_emit.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
+                    expand_component_tokens(&mut c_emit.base);
+                    let class_name = composites::register_grouping_raw(raw[start..i].trim(), c_emit);
+                    out.push(class_name);
+                }
             } else {
                 if ident.starts_with('_') {
                     ensure(&mut pending);
@@ -219,33 +245,8 @@ impl ClassNameVisitor {
                 else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); } }
             }
         }
-        if let Some(mut c) = pending {
-            let expand_component_tokens = |tokens: &mut Vec<String>| {
-                let mut expanded: Vec<String> = Vec::new();
-                for t in tokens.iter() {
-                    if let Some(name) = t.strip_prefix('$') {
-                        if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
-                        if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
-                    } else if let Some(name) = t.strip_prefix('_') {
-                        if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
-                        if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
-                    }
-                    expanded.push(t.clone());
-                }
-                *tokens = expanded;
-            };
-            for (_, toks) in c.state_rules.iter_mut() { expand_component_tokens(toks); }
-            for (_, toks) in c.child_rules.iter_mut() { expand_component_tokens(toks); }
-            for (_, toks) in c.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
-            for (_, toks) in c.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
-            expand_component_tokens(&mut c.base);
-            let has_fluid = c.base.iter().any(|t| t.starts_with("fluid:"));
-            if !has_fluid && c.child_rules.is_empty() && c.state_rules.is_empty() && c.data_attr_rules.is_empty() && c.conditional_blocks.is_empty() && c.extra_raw.is_empty() && c.animations.is_empty() {
-                out.extend(c.base);
-            } else {
-                let class_name = composites::get_or_create_full(c);
-                out.push(class_name);
-            }
+        if let Some(c) = pending { // trailing simple utilities collected
+            out.extend(c.base);
         }
         out
     }

@@ -15,7 +15,9 @@ pub struct Composite {
 
 #[derive(Default)]
 struct CompositeRegistry {
+    // legacy: hash -> class name mapping (kept for backwards compat if any hashed classes still appear)
     map: HashMap<String, String>,
+    // class name (raw grouping syntax or legacy hashed) -> composite data
     data: HashMap<String, Composite>,
 }
 
@@ -56,6 +58,15 @@ pub fn get_or_create_full(c: Composite) -> String {
     reg.map.insert(hash, class_name.clone());
     reg.data.insert(class_name.clone(), c);
     class_name
+}
+
+/// Register a composite using the raw grouping syntax string directly as the class name.
+/// If a composite has already been registered for this exact class name we keep the first one.
+/// (We intentionally do not attempt structural deduplication here to preserve 1:1 mapping.)
+pub fn register_grouping_raw(raw: &str, c: Composite) -> String {
+    let mut reg = REGISTRY.write().unwrap();
+    reg.data.entry(raw.to_string()).or_insert(c); // keep existing if present
+    raw.to_string()
 }
 
 pub fn get(class_name: &str) -> Option<Composite> {

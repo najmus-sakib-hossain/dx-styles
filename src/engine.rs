@@ -280,8 +280,15 @@ impl StyleEngine {
     }
 
     fn expand_composite(&self, class_name: &str) -> Option<String> {
-    if !class_name.starts_with("dx-class-") { return None; }
-        let comp = composites::get(class_name)?;
+        // New direct syntax mapping: grouping expressions are stored verbatim.
+        // Try direct lookup; if not found fall back to legacy hashed naming.
+        let comp = if let Some(c) = composites::get(class_name) {
+            c
+        } else if class_name.starts_with("dx-class-") {
+            composites::get(class_name)?
+        } else {
+            return None;
+        };
         let resolve_tokens = |tokens: &[String]| -> Vec<String> {
             let mut out = Vec::new();
             for t in tokens {
