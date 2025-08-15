@@ -382,7 +382,7 @@ fn simplify_group_parents_in_complex_selectors(input: &str) -> String {
                     let group_end = j;
                     let mut group_after = group_end;
                     while group_after < bytes.len() && bytes[group_after].is_ascii_whitespace() { group_after += 1; }
-                    let mut k = group_after;
+                    let k = group_after;
                     if k < bytes.len() {
                         let next = bytes[k];
                         if matches!(next, b'>' | b'+' | b'~' | b'[') || next.is_ascii_alphanumeric() || next == b'.' || next == b'#' {
@@ -405,7 +405,7 @@ fn simplify_group_parents_in_complex_selectors(input: &str) -> String {
     let ob = out.as_bytes();
     while idx < ob.len() {
         if ob[idx] == b'.' {
-            let start = idx;
+            let _start = idx;
             let mut k = idx + 1;
             while k < ob.len() && (ob[k].is_ascii_alphanumeric() || matches!(ob[k], b'-' | b'_' | b'*' | b'\\')) {
                 if ob[k] == b'\\' && k + 1 < ob.len() && ob[k+1] == b'(' { break; }

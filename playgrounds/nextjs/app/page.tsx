@@ -11,7 +11,7 @@ export default function Home() {
     >
       <div className="max-w-5xl mx-auto">
         
-        <div className="card(p-8 bg-white/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
+        <div className="card(p-8 bg-black/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
           
           <h1 className="text-4xl md:text-5xl ~text(2rem@md, 3rem@xl)">
             Dx Styles Grouping
