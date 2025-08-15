@@ -5,7 +5,7 @@ use oxc_ast::ast::{
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 use std::collections::{HashSet, HashMap};
-use crate::composites;
+use crate::composites::{self, Composite};
 use crate::interner::ClassInterner;
 use std::fs;
 use std::path::Path;
@@ -60,7 +60,10 @@ impl ClassNameVisitor {
         let states: HashSet<&str> = STATES.iter().copied().collect();
         let cqs: HashSet<&str> = CQS.iter().copied().collect();
 
-        let mut out = Vec::new();
+    let mut out = Vec::new();
+    // Working composite under construction per raw attribute string.
+    let mut pending: Option<Composite> = None;
+    let mut ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
         let mut i = 0usize;
         let bytes = raw.as_bytes();
         while i < bytes.len() {
@@ -113,16 +116,39 @@ impl ClassNameVisitor {
                         let composite_class = composites::get_or_create(&tokens);
                         out.push(composite_class);
                     }
-                } else if screens.contains(ident) || states.contains(ident) || cqs.contains(ident) || ident == "dark" || ident == "light" {
-                    for token in inner_tokens { out.push(format!("{}:{}", ident, token)); }
+                } else if screens.contains(ident) {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.conditional_blocks.push((format!("screen:{}", ident), inner_tokens)); }
+                } else if states.contains(ident) || cqs.contains(ident) || ident == "dark" || ident == "light" {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.state_rules.push((ident.to_string(), inner_tokens)); }
                 } else if ident == "div" || ident == "span" || ident == "p" || ident == "h1" || ident == "h2" || ident == "h3" || ident == "h4" || ident == "h5" || ident == "h6" || ident == "ul" || ident == "li" || ident == "section" || ident == "header" || ident == "footer" || ident == "main" || ident == "nav" {
-                    // Child selector group placeholder: represent as synthetic token child:TAG:utility
-                    // Later engine/composite enrichments will turn these into real child rules.
-                    for token in inner_tokens { out.push(format!("child:{}:{}", ident, token)); }
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.child_rules.push((ident.to_string(), inner_tokens)); }
                 } else if ident.starts_with('*') {
-                    // Data attribute group *attr(...)
-                    let attr_name = ident.trim_start_matches('*');
-                    for token in inner_tokens { out.push(format!("data:{}:{}", attr_name, token)); }
+                    ensure(&mut pending);
+                    let attr_name = ident.trim_start_matches('*').to_string();
+                    if let Some(c) = &mut pending { c.data_attr_rules.push((attr_name, inner_tokens)); }
+                } else if ident.starts_with('?') {
+                    // Conditional query DSL e.g. ?@container>640px(...)
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.conditional_blocks.push((ident[1..].to_string(), inner_tokens)); }
+                } else if ident.starts_with('~') {
+                    // Fluid scaling ~prop(min@sm, max@lg)
+                    // Parse tokens of form value@breakpoint
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        let prop = ident.trim_start_matches('~');
+                        if inner_tokens.len() >= 2 {
+                            let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.to_string(); let bp = parts.next().unwrap_or("base").to_string(); Some((v,bp)) };
+                            if let (Some((min_v, min_bp)), Some((max_v, max_bp))) = (parse_part(&inner_tokens[0]), parse_part(&inner_tokens[1])) {
+                                // Create clamp formula placeholder token
+                                let token = format!("fluid:{}:{}:{}:{}", prop, min_v, min_bp, max_v); // simplified
+                                c.base.push(token);
+                                let _ = max_bp; // reserved for extended logic
+                            }
+                        }
+                    }
                 } else if ident.starts_with('$') {
                     // Generated single-purpose utility -> collapse to composite hashed class immediately
                     if !inner_tokens.is_empty() {
@@ -133,24 +159,39 @@ impl ClassNameVisitor {
                         out.push(composite_class);
                     }
                 } else if ident == "from" || ident == "to" || ident == "via" {
-                    // For now, keep these tokens; animation system will later aggregate.
-                    for t in inner_tokens { out.push(format!("{}:{}", ident, t)); }
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        // encode animation stage
+                        let stage = ident.to_string();
+                        let line = format!("animstage|{}|{}", stage, inner_tokens.join("+"));
+                        c.animations.push(line);
+                    }
+                } else if ident == "motion" {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        c.base.push(format!("motion:{}", inner_tokens.join("_")));
+                    }
                 } else {
                     // component definition
                     if !self.components.contains_key(ident) {
                         self.components.insert(ident.to_string(), inner_tokens.clone());
                     }
                     // expand for this element
-                    if let Some(list) = self.components.get(ident) { out.extend(list.iter().cloned()); }
+                    if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
                 }
             } else {
                 // plain token
-                if let Some(list) = self.components.get(ident) {
-                    // component usage expansion
-                    out.extend(list.iter().cloned());
-                } else {
-                    out.push(ident.to_string());
-                }
+                if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
+                else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); } }
+            }
+        }
+        if let Some(c) = pending {
+            // If composite has only simple base tokens and no advanced features we can still return raw tokens for backward compatibility.
+            if c.child_rules.is_empty() && c.state_rules.is_empty() && c.data_attr_rules.is_empty() && c.conditional_blocks.is_empty() && c.extra_raw.is_empty() && c.animations.is_empty() {
+                out.extend(c.base);
+            } else {
+                let class_name = composites::get_or_create_full(c);
+                out.push(class_name);
             }
         }
         out

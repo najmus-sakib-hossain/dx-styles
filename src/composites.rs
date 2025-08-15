@@ -11,10 +11,20 @@ use std::sync::RwLock;
 // Tokens are stored (not resolved) so the engine can reuse existing resolution logic.
 #[derive(Clone, Debug, Default)]
 pub struct Composite {
+    // Declarations that apply directly to the base selector.
     pub base: Vec<String>,
+    // (child_selector_suffix, tokens) => .class > child_selector_suffix
     pub child_rules: Vec<(String, Vec<String>)>,
+    // (pseudo_or_state, tokens) => .class:pseudo_or_state
+    pub state_rules: Vec<(String, Vec<String>)>,
+    // (data-attr, tokens) => .class[data-attr]
+    pub data_attr_rules: Vec<(String, Vec<String>)>,
+    // (at_rule, tokens) => at-rule wrapping .class { tokens }
     pub conditional_blocks: Vec<(String, Vec<String>)>,
+    // Raw extra CSS blocks fully formed (e.g. @keyframes ...)
     pub extra_raw: Vec<String>,
+    // Encoded animation keyframe spec strings (animkf|name|stage|token token|stage|...)
+    pub animations: Vec<String>,
 }
 
 #[derive(Default)]
@@ -41,6 +51,11 @@ fn hash_composite(c: &Composite) -> String {
         let mut t = toks.clone(); t.sort(); format!("{}=>{}", a, t.join(","))
     }).collect();
     conds.sort(); conds.hash(&mut h);
+    let mut states: Vec<String> = c.state_rules.iter().map(|(s, toks)| { let mut t = toks.clone(); t.sort(); format!("{}=>{}", s, t.join(",")) }).collect();
+    states.sort(); states.hash(&mut h);
+    let mut datas: Vec<String> = c.data_attr_rules.iter().map(|(s, toks)| { let mut t = toks.clone(); t.sort(); format!("{}=>{}", s, t.join(",")) }).collect();
+    datas.sort(); datas.hash(&mut h);
+    let mut anims = c.animations.clone(); anims.sort(); anims.hash(&mut h);
     let mut extra = c.extra_raw.clone(); extra.sort(); extra.hash(&mut h);
     format!("{:x}", h.finish())
 }
