@@ -1,117 +1,5 @@
-.max-w-full {
-  max-width: 100%;
-}
-
-@container (width >= 32rem) {
-  .\@lg\:bg-yellow-300 {
-    background-color: oklch(90.5% .182 98.111);
-  }
-}
-
-.hidden {
-  display: none;
-}
-
-.w-full {
-  width: 100%;
-}
-
-@container (width >= 32rem) {
-  .\@lg\:text-yellow-900 {
-    color: oklch(42.1% .095 57.708);
-  }
-}
-
-.rounded-lg {
-  border-radius: .5rem;
-}
-
-.absolute {
-  position: absolute;
-}
-
-.from\:opacity-0 {
-  opacity: 0;
-}
-
-.text-gray-800 {
-  color: oklch(27.8% .033 256.848);
-}
-
 .bg-blue-300 {
   background-color: oklch(80.9% .105 251.813);
-}
-
-@container (width >= 32rem) {
-  .\@lg\:text-2xl {
-    font-size: 1.5rem;
-  }
-}
-
-.text-4xl {
-  font-size: 2.25rem;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-.transition-all {
-  transition-property: all;
-}
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.bg-gray-50 {
-  background-color: oklch(98.5% .002 247.839);
-}
-
-.text-blue-900 {
-  color: oklch(37.9% .146 265.522);
-}
-
-@container (width >= 24rem) {
-  .\@sm\:text-xl {
-    font-size: 1.25rem;
-  }
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.mt-2 {
-  margin-top: .5rem;
-}
-
-@media (width >= 768px) {
-  .md\:p-8 {
-    padding: 2rem;
-  }
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-@container (width >= 42rem) {
-  .\@2xl\:bg-red-300 {
-    background-color: oklch(80.8% .114 19.571);
-  }
-}
-
-.to\:opacity-100 {
-  opacity: 1;
-}
-
-.mt-8 {
-  margin-top: 2rem;
 }
 
 @container (width >= 42rem) {
@@ -120,16 +8,86 @@
   }
 }
 
+.min-h-screen {
+  min-height: 100vh;
+}
+
+@container (width >= 24rem) {
+  .\@sm\:text-green-900 {
+    color: oklch(39.3% .095 152.535);
+  }
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.hidden {
+  display: none;
+}
+
+.hover\:bg-red-500:hover {
+  background-color: oklch(63.7% .237 25.331);
+}
+
+@container (width >= 24rem) {
+  .\@sm\:bg-green-300 {
+    background-color: oklch(87.1% .15 154.449);
+  }
+}
+
+.rounded-lg {
+  border-radius: .5rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.w-screen {
+  width: 100vw;
+}
+
+@container (width >= 32rem) {
+  .\@lg\:bg-yellow-300 {
+    background-color: oklch(90.5% .182 98.111);
+  }
+}
+
+@container (width >= 32rem) {
+  .\@lg\:text-2xl {
+    font-size: 1.5rem;
+  }
+}
+
 .max-w-5xl {
   max-width: 64rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
 }
 
 .duration-300 {
   transition-duration: .3s;
 }
 
+.text-4xl {
+  font-size: 2.25rem;
+}
+
+@container (width >= 24rem) {
+  .\@sm\:text-xl {
+    font-size: 1.25rem;
+  }
+}
+
 .hover\:mt-5:hover {
   margin-top: 1.25rem;
+}
+
+.w-full {
+  width: 100%;
 }
 
 @container (width >= 42rem) {
@@ -138,17 +96,81 @@
   }
 }
 
-.w-screen {
-  width: 100vw;
+.bg-gray-50 {
+  background-color: oklch(98.5% .002 247.839);
 }
 
-.text-gray-600 {
-  color: oklch(44.6% .03 256.802);
+.transition-all {
+  transition-property: all;
 }
 
-@container (width >= 24rem) {
-  .\@sm\:text-green-900 {
-    color: oklch(39.3% .095 152.535);
+.text-blue-900 {
+  color: oklch(37.9% .146 265.522);
+}
+
+@media (width >= 768px) {
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+
+.mt-8 {
+  margin-top: 2rem;
+}
+
+@container (width >= 42rem) {
+  .\@2xl\:bg-red-300 {
+    background-color: oklch(80.8% .114 19.571);
+  }
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.to\:opacity-100 {
+  opacity: 1;
+}
+
+.mt-2 {
+  margin-top: .5rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.from\:opacity-0 {
+  opacity: 0;
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
+.hover\:text-yellow-500:hover {
+  color: oklch(79.5% .184 86.047);
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.text-gray-800 {
+  color: oklch(27.8% .033 256.848);
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+@media (width >= 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
   }
 }
 
@@ -158,38 +180,16 @@
   animation-delay: 0s;
 }
 
-.font-bold {
-  font-weight: 700;
+.absolute {
+  position: absolute;
 }
 
-.text-lg {
-  font-size: 1.125rem;
+.text-gray-600 {
+  color: oklch(44.6% .03 256.802);
 }
 
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-@media (width >= 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
+@container (width >= 32rem) {
+  .\@lg\:text-yellow-900 {
+    color: oklch(42.1% .095 57.708);
   }
-}
-
-@container (width >= 24rem) {
-  .\@sm\:bg-green-300 {
-    background-color: oklch(87.1% .15 154.449);
-  }
-}
-
-.hover\:bg-red-500:hover {
-  background-color: oklch(0.637 0.237 25.331);
-}
-
-.hover\:text-yellow-500:hover {
-  color: oklch(0.795 0.184 86.047);
 }

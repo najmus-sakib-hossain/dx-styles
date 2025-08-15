@@ -52,7 +52,7 @@ impl ClassNameVisitor {
         // Static sets (could be generated from config, hardcoded for now)
         // Note: keep in sync with styles.toml if updated.
         const SCREENS: &[&str] = &["xs","sm","md","lg","xl","2xl"];
-        const STATES: &[&str] = &[
+    const STATES: &[&str] = &[
             "hover","focus","focus-within","focus-visible","active","visited","disabled","checked","first","last","odd","even","required","optional","valid","invalid","read-only","before","after","placeholder","file","marker","selection","group-hover","group-focus","group-active","group-visited","peer-checked","peer-focus","peer-active","peer-hover","empty","target"
         ];
         const CQS: &[&str] = &["@xs","@sm","@md","@lg","@xl","@2xl","@3xl","@4xl","@5xl","@6xl","@7xl","@8xl","@9xl"];
@@ -113,8 +113,20 @@ impl ClassNameVisitor {
                         let composite_class = composites::get_or_create(&tokens);
                         out.push(composite_class);
                     }
-                } else if screens.contains(ident) || states.contains(ident) || cqs.contains(ident) {
+                } else if screens.contains(ident) || states.contains(ident) || cqs.contains(ident) || ident == "dark" || ident == "light" {
                     for token in inner_tokens { out.push(format!("{}:{}", ident, token)); }
+                } else if ident.starts_with('$') {
+                    // Generated single-purpose utility -> collapse to composite hashed class immediately
+                    if !inner_tokens.is_empty() {
+                        let cname = &ident[1..];
+                        let composite_class = composites::get_or_create(&inner_tokens);
+                        // also register the alias name itself mapping to composite class usage
+                        self.components.entry(cname.to_string()).or_insert(inner_tokens.clone());
+                        out.push(composite_class);
+                    }
+                } else if ident == "from" || ident == "to" || ident == "via" {
+                    // For now, keep these tokens; animation system will later aggregate.
+                    for t in inner_tokens { out.push(format!("{}:{}", ident, t)); }
                 } else {
                     // component definition
                     if !self.components.contains_key(ident) {

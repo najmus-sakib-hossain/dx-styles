@@ -52,6 +52,8 @@ peer-active = ".peer:active &"
 peer-hover = ".peer:hover &"
 empty = ":empty"
 target = ":target"
+dark = ".dark &"
+light = ".light &"
 
 # -----------------------------------------------------------------------------
 # [container_queries]
