@@ -63,8 +63,10 @@ impl ClassNameVisitor {
     let mut out = Vec::new();
     // Working composite under construction per raw attribute string.
     let mut pending: Option<Composite> = None;
-    let mut ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
-        let mut i = 0usize;
+    // Local (scoped) component definitions starting with underscore – only valid within this single class attribute.
+    let mut local_components: HashMap<String, Vec<String>> = HashMap::new();
+    let ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
+    let mut i = 0usize;
         let bytes = raw.as_bytes();
         while i < bytes.len() {
             // skip whitespace
@@ -92,14 +94,45 @@ impl ClassNameVisitor {
                 }
                 let inner_end = i.saturating_sub(1);
                 let inner = &raw[inner_start..inner_end];
-                // split inner by whitespace into utilities/prefix filters
-                let inner_tokens: Vec<String> = inner.split_whitespace().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
+                // Nested child parsing: identify patterns tagName(token token)
+                let mut nested_children: Vec<(String, Vec<String>)> = Vec::new();
+                let _simple_inner_source = inner.to_string();
+                // quick scan for tagName( ... ) within inner
+                {
+                    let chars: Vec<char> = inner.chars().collect();
+                    let mut j = 0usize;
+                    while j < chars.len() {
+                        if chars[j].is_alphabetic() {
+                            let start_tag = j;
+                            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '-') { j += 1; }
+                            if j < chars.len() && chars[j] == '(' {
+                                // parse nested group
+                                j += 1; let content_start = j; let mut d = 1;
+                                while j < chars.len() && d > 0 { if chars[j] == '(' { d += 1; } else if chars[j] == ')' { d -= 1; } j += 1; }
+                                let content_end = j.saturating_sub(1);
+                                let tag = inner[start_tag..].split('(').next().unwrap_or("").to_string();
+                                let content = &inner[content_start..content_end];
+                                let toks: Vec<String> = content.split_whitespace().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
+                                if !tag.is_empty() && !toks.is_empty() { nested_children.push((tag, toks)); }
+                            }
+                        } else { j += 1; }
+                    }
+                }
+                // Remove nested child patterns from simple processing if any were found (fallback: keep original)
+                if !nested_children.is_empty() { /* nested children handled; skipping replacement of simple source */ }
+                // split inner by whitespace into utilities/prefix filters; also treat commas as separators (fluid scaling, etc.)
+                let inner_tokens: Vec<String> = inner
+                    .split(|c: char| c.is_whitespace() || c == ',')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.trim().trim_end_matches(',').to_string())
+                    .collect();
                 if ident.starts_with('+') || ident.starts_with('-') {
                     // Variant path: build final token list then collapse to composite class.
                     let additive = ident.starts_with('+');
                     let cname = ident.trim_start_matches(|c| c == '+' || c == '-');
                     let mut tokens: Vec<String> = Vec::new();
                     if let Some(base) = self.components.get(cname) { tokens.extend(base.iter().cloned()); }
+                    if let Some(base) = local_components.get(cname) { tokens.extend(base.iter().cloned()); }
                     if additive {
                         tokens.extend(inner_tokens.into_iter());
                     } else { // subtractive: treat provided as prefixes to remove
@@ -125,6 +158,8 @@ impl ClassNameVisitor {
                 } else if ident == "div" || ident == "span" || ident == "p" || ident == "h1" || ident == "h2" || ident == "h3" || ident == "h4" || ident == "h5" || ident == "h6" || ident == "ul" || ident == "li" || ident == "section" || ident == "header" || ident == "footer" || ident == "main" || ident == "nav" {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending { c.child_rules.push((ident.to_string(), inner_tokens)); }
+                    // also include nested children parsed above
+                    if let Some(c) = &mut pending { for (tag, toks) in nested_children { c.child_rules.push((tag, toks)); } }
                 } else if ident.starts_with('*') {
                     ensure(&mut pending);
                     let attr_name = ident.trim_start_matches('*').to_string();
@@ -134,15 +169,15 @@ impl ClassNameVisitor {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending { c.conditional_blocks.push((ident[1..].to_string(), inner_tokens)); }
                 } else if ident.starts_with('~') {
-                    // Fluid scaling ~prop(min@sm, max@lg)
+                    // Fluid scaling ~prop(min@bp, max@bp)
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let prop = ident.trim_start_matches('~');
-                        if inner_tokens.len() >= 2 {
-                            let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.to_string(); let bp = parts.next().unwrap_or("base").to_string(); Some((v,bp)) };
-                            if let (Some((min_v, min_bp)), Some((max_v, max_bp))) = (parse_part(&inner_tokens[0]), parse_part(&inner_tokens[1])) {
-                                let token = format!("fluid:{}:{}:{}:{}:{}", prop, min_v, min_bp, max_v, max_bp);
-                                c.base.push(token);
+                        let pieces: Vec<&str> = inner.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                        if pieces.len() >= 2 {
+                            let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.trim().to_string(); let bp = parts.next().unwrap_or("base").trim().to_string(); Some((v,bp)) };
+                            if let (Some((min_v, min_bp)), Some((max_v, max_bp))) = (parse_part(pieces[0]), parse_part(pieces[1])) {
+                                c.base.push(format!("fluid:{}:{}:{}:{}:{}", prop, min_v, min_bp, max_v, max_bp));
                             }
                         }
                     }
@@ -170,6 +205,12 @@ impl ClassNameVisitor {
                         self.components.entry(cname.to_string()).or_insert(inner_tokens.clone());
                         out.push(composite_class);
                     }
+                } else if ident.starts_with('_') {
+                    // Scoped (local) component definition
+                    let cname = ident.trim_start_matches('_');
+                    local_components.entry(cname.to_string()).or_insert(inner_tokens.clone());
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending { c.base.extend(inner_tokens.clone()); }
                 } else if ident == "from" || ident == "to" || ident == "via" {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
@@ -197,14 +238,36 @@ impl ClassNameVisitor {
                     // scoped component definition like _highlight(a b)
                     if !self.components.contains_key(ident) { /* do not persist globally */ }
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.base.push(ident.to_string()); }
+                    let cname = ident.trim_start_matches('_');
+                    if let Some(local) = local_components.get(cname) {
+                        if let Some(c) = &mut pending { c.base.extend(local.clone()); }
+                    } else if let Some(global) = self.components.get(cname) {
+                        if let Some(c) = &mut pending { c.base.extend(global.clone()); }
+                    } else if let Some(c) = &mut pending { c.base.push(ident.to_string()); }
                 } else if ident == "forwards" {
                     ensure(&mut pending); if let Some(c)= &mut pending { c.base.push("animfill:forwards".to_string()); }
                 } else if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
                 else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); } }
             }
         }
-        if let Some(c) = pending {
+    if let Some(mut c) = pending {
+            // Expand $component references inside stored rule token lists (state_rules, child_rules, etc.)
+            let expand_component_tokens = |tokens: &mut Vec<String>| {
+                let mut expanded: Vec<String> = Vec::new();
+                for t in tokens.iter() {
+                    if let Some(name) = t.strip_prefix('$') {
+                        if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                        if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                    }
+                    expanded.push(t.clone());
+                }
+                *tokens = expanded;
+            };
+            for (_, toks) in c.state_rules.iter_mut() { expand_component_tokens(toks); }
+            for (_, toks) in c.child_rules.iter_mut() { expand_component_tokens(toks); }
+            for (_, toks) in c.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
+            for (_, toks) in c.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
+            expand_component_tokens(&mut c.base);
             // If composite has only simple base tokens and no advanced features we can still return raw tokens for backward compatibility.
             if c.child_rules.is_empty() && c.state_rules.is_empty() && c.data_attr_rules.is_empty() && c.conditional_blocks.is_empty() && c.extra_raw.is_empty() && c.animations.is_empty() {
                 out.extend(c.base);

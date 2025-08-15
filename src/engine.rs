@@ -201,6 +201,11 @@ impl StyleEngine {
                     media_queries.push(format!("@container (min-width: {})", cq_value));
                 } else if let Some(state_value) = self.states.get(part) {
                     if state_value.contains('&') { wrappers.push(state_value.to_string()); } else { pseudo_classes.push_str(state_value); }
+                } else if part == "dark" {
+                    // Themable ancestor support: wrap selector later as .dark .class
+                    wrappers.push(".dark &".to_string());
+                } else if part == "light" {
+                    wrappers.push(":root &".to_string());
                 }
             }
         }
@@ -214,73 +219,12 @@ impl StyleEngine {
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
-            // sanitize duplicate trailing semicolons & invalid combined transform scale declaration pattern
             css = sanitize_declarations(&css);
             let mut selector = String::from(".");
-            for ch in class_name.chars() {
-                match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
-            }
+            for ch in class_name.chars() { match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) } }
             selector.push_str(&pseudo_classes);
-            let mut blocks = String::new();
-            // Detect encoded composite even if only single line (no \n present)
-            let is_encoded_composite = css.contains("BASE|") || css.contains("STATE|") || css.contains("CHILD|") || css.contains("COND|") || css.contains("DATA|") || css.contains("RAW|") || css.contains("ANIM|");
-            if is_encoded_composite {
-                // Split into logical lines; if there are no newlines, treat entire string as one line
-                let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css.as_str()] };
-                for line in lines {
-                    if line.is_empty() { continue; }
-                    if line.starts_with("BASE|") {
-                        let decls = &line[5..];
-                        blocks.push_str(&build_block(&selector, decls));
-                        blocks.push('\n');
-                    } else if line.starts_with("STATE|") {
-                        let parts: Vec<&str> = line.splitn(3,'|').collect();
-                        if parts.len()==3 { let state = parts[1]; let decls=parts[2]; blocks.push_str(&build_block(&format!("{}:{}", selector, state), decls)); blocks.push('\n'); }
-                    } else if line.starts_with("CHILD|") {
-                        let parts: Vec<&str> = line.splitn(3,'|').collect();
-                        if parts.len()==3 { let child = parts[1]; let decls=parts[2]; blocks.push_str(&build_block(&format!("{} > {}", selector, child), decls)); blocks.push('\n'); }
-                    } else if line.starts_with("DATA|") {
-                        let parts: Vec<&str> = line.splitn(3,'|').collect();
-                        if parts.len()==3 { let attr = parts[1]; let decls=parts[2]; blocks.push_str(&build_block(&format!("{}[data-{}]", selector, attr), decls)); blocks.push('\n'); }
-                    } else if line.starts_with("COND|") {
-                        let parts: Vec<&str> = line.splitn(3,'|').collect();
-                        if parts.len()==3 { let cond = parts[1]; let decls=parts[2];
-                            if let Some(rest) = cond.strip_prefix("@container>") {
-                                blocks.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", rest, build_block(&selector, decls)));
-                            } else if let Some(bp) = cond.strip_prefix("screen:") {
-                                if let Some(val) = self.screens.get(bp) {
-                                    blocks.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", val, build_block(&selector, decls)));
-                                }
-                            }
-                        }
-                    } else if line.starts_with("ANIM|") {
-                        // TODO: implement animation keyframe aggregation
-                    } else if line.starts_with("RAW|") {
-                        // Raw block passthrough
-                        let raw = &line[4..];
-                        blocks.push_str(raw);
-                        blocks.push('\n');
-                    }
-                }
-                if blocks.ends_with('\n') { blocks.pop(); }
-            } else {
-                if wrappers.is_empty() {
-                    blocks.push_str(&build_block(&selector, &css));
-                } else {
-                    for w in &wrappers { let replaced = w.replace('&', &selector); blocks.push_str(&build_block(&replaced, &css)); blocks.push('\n'); }
-                    if blocks.ends_with('\n') { blocks.pop(); }
-                }
-            }
-            let mut css_body = blocks;
-            for mq in media_queries.iter().rev() {
-                let mut wrapped = String::new();
-                wrapped.push_str(mq);
-                wrapped.push_str(" {\n");
-                for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
-                wrapped.push('}');
-                css_body = wrapped;
-            }
-            css_body
+            let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
+            self.wrap_media_queries(blocks, &media_queries)
         })
     }
 
@@ -311,6 +255,10 @@ impl StyleEngine {
                     media_queries.push(format!("@container (min-width: {})", cq_value));
                 } else if let Some(state_value) = self.states.get(part) {
                     if state_value.contains('&') { wrappers.push(state_value.to_string()); } else { pseudo_classes.push_str(state_value); }
+                } else if part == "dark" {
+                    wrappers.push(".dark &".to_string());
+                } else if part == "light" {
+                    wrappers.push(":root &".to_string());
                 }
             }
         }
@@ -326,38 +274,9 @@ impl StyleEngine {
         core_css_raw.map(|mut css| {
             css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
-            selector.push('.');
-            selector.push_str(escaped);
-            selector.push_str(&pseudo_classes);
-            let mut blocks = String::new();
-        let is_encoded_composite = css.contains("BASE|") || css.contains("STATE|") || css.contains("CHILD|") || css.contains("COND|") || css.contains("DATA|") || css.contains("RAW|") || css.contains("ANIM|");
-        if is_encoded_composite {
-                let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css.as_str()] };
-                for line in lines {
-                    if line.is_empty() { continue; }
-                    if line.starts_with("BASE|") { let decls=&line[5..]; blocks.push_str(&build_block(&selector, decls)); blocks.push('\n'); }
-                    else if line.starts_with("STATE|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{}:{}", selector,p[1]), p[2])); blocks.push('\n'); }}
-                    else if line.starts_with("CHILD|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{} > {}", selector,p[1]), p[2])); blocks.push('\n'); }}
-                    else if line.starts_with("DATA|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { blocks.push_str(&build_block(&format!("{}[data-{}]", selector,p[1]), p[2])); blocks.push('\n'); }}
-                    else if line.starts_with("COND|") { let p: Vec<&str>=line.splitn(3,'|').collect(); if p.len()==3 { if let Some(rest)=p[1].strip_prefix("@container>") { blocks.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", rest, build_block(&selector,p[2]))); } else if let Some(bp)=p[1].strip_prefix("screen:") { if let Some(val)=self.screens.get(bp) { blocks.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", val, build_block(&selector,p[2]))); } } }}
-                    else if line.starts_with("ANIM|") { /* TODO */ }
-                    else if line.starts_with("RAW|") { let raw=&line[4..]; blocks.push_str(raw); blocks.push('\n'); }
-                }
-                if blocks.ends_with('\n') { blocks.pop(); }
-            } else {
-                if wrappers.is_empty() { blocks.push_str(&build_block(&selector, &css)); }
-                else { for w in &wrappers { let replaced = w.replace('&', &selector); blocks.push_str(&build_block(&replaced, &css)); blocks.push('\n'); } if blocks.ends_with('\n') { blocks.pop(); } }
-            }
-            let mut css_body = blocks;
-            for mq in media_queries.iter().rev() {
-                let mut wrapped = String::new();
-                wrapped.push_str(mq);
-                wrapped.push_str(" {\n");
-                for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
-                wrapped.push('}');
-                css_body = wrapped;
-            }
-            css_body
+            selector.push('.'); selector.push_str(escaped); selector.push_str(&pseudo_classes);
+            let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
+            self.wrap_media_queries(blocks, &media_queries)
         })
     }
 
@@ -365,21 +284,69 @@ impl StyleEngine {
         if !class_name.starts_with("dx-c-") { return None; }
         let comp = composites::get(class_name)?;
         // helper closure to resolve utility tokens into declarations
-        let mut resolve_tokens = |tokens: &[String]| -> Vec<String> {
+        let resolve_tokens = |tokens: &[String]| -> Vec<String> {
             let mut out = Vec::new();
             for t in tokens {
                 if let Some(rest) = t.strip_prefix("fluid:") {
                     let parts: Vec<&str> = rest.split(':').collect();
-                    if parts.len() >= 4 { // fluid:prop:min:minBp:max
+                    if parts.len() >= 5 { // fluid:prop:min:minBp:max:maxBp
                         let prop = parts[0];
                         let min_v = parts[1];
+                        let min_bp_key = parts[2];
                         let max_v = parts[3];
-                        out.push(format!("{}: clamp({}, calc(({} + {})/2), {})", prop, min_v, min_v, max_v, max_v));
+                        let max_bp_key = parts[4];
+                        let lookup_bp = |key: &str| -> Option<f32> {
+                            if key.chars().all(|c| c.is_ascii_digit()) { return key.parse::<f32>().ok(); }
+                            self.screens.get(key).and_then(|v| {
+                                // expect something like 768px
+                                if let Some(px) = v.strip_suffix("px") { px.parse().ok() } else { None }
+                            })
+                        };
+                        if let (Some(min_bp), Some(max_bp)) = (lookup_bp(min_bp_key), lookup_bp(max_bp_key)) {
+                            // Extract numeric values (assuming rem or px). Leave original units in endpoints.
+                            let parse_val = |val: &str| -> Option<f32> {
+                                let digits: String = val.chars().take_while(|c| (c.is_ascii_digit() || *c == '.')).collect();
+                                digits.parse().ok()
+                            };
+                            if let (Some(min_num), Some(max_num)) = (parse_val(min_v), parse_val(max_v)) {
+                                // Use vw based interpolation anchored between min_bp and max_bp
+                                let formula = format!("clamp({}, calc({} + {} * (100vw - {}px) / ({} - {})), {})", min_v, min_v, (max_num - min_num), min_bp, max_bp, min_bp, max_v);
+                                out.push(format!("{}: {}", prop, formula));
+                                continue;
+                            }
+                        }
+                        // fallback basic clamp
+                        out.push(format!("{}: clamp({}, {}, {})", prop, min_v, min_v, max_v));
                         continue;
                     }
                 } else if let Some(rest) = t.strip_prefix("motion:") {
                     let hash = format!("{:x}", seahash::hash(rest.as_bytes()));
-                    out.push(format!("transition-timing-function: cubic-bezier(0.34,1.56,0.64,1); /* motion:{} */", hash));
+                    // Produce physics-inspired keyframes (overshoot) and animation reference
+                    let kf_name = format!("dx-motion-{}", &hash[..6]);
+                    let mut keyframes = String::from("@keyframes "); keyframes.push_str(&kf_name); keyframes.push_str(" {\n  0% { transform: translateY(0) scale(1); }\n  60% { transform: translateY(-6px) scale(1.04); }\n  80% { transform: translateY(2px) scale(0.98); }\n  100% { transform: translateY(0) scale(1); }\n}\n");
+                    out.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
+                    out.push(keyframes); // Will be emitted as RAW block
+                    continue;
+                } else if let Some(rest) = t.strip_prefix("gradient:mesh:") {
+                    // Refined mesh gradient using golden-angle (Vogel) distribution for smoother layout
+                    let colors: Vec<&str> = rest.split('+').filter(|c| !c.trim().is_empty()).collect();
+                    if colors.len() >= 2 {
+                        let phi = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
+                        let mut layers: Vec<String> = Vec::new();
+                        let n = colors.len() as f32;
+                        for (i, c) in colors.iter().enumerate() {
+                            let i_f = i as f32 + 0.5;
+                            let r = i_f / n; // radius fraction
+                            let theta = i_f * phi;
+                            let x = 50.0 + r * 40.0 * theta.cos();
+                            let y = 50.0 + r * 40.0 * theta.sin();
+                            let sz = 120.0 - r * 40.0;
+                            layers.push(format!("radial-gradient(circle at {:.1}% {:.1}%, {} {:.0}%)", x, y, c.trim(), sz.max(25.0)));
+                        }
+                        out.push(format!("background-image: {}", layers.join(", ")));
+                        out.push("background-size: cover".to_string());
+                        out.push("background-blend-mode: screen, lighten".to_string());
+                    }
                     continue;
                 }
                 if let Some(rule) = self.precompiled.get(t) { out.push(rule.clone()); }
@@ -546,21 +513,102 @@ impl StyleEngine {
 
 // Helpers ------------------------------------------------------------------
 
+impl StyleEngine {
+    fn decode_encoded_css(&self, css: &str, selector: &str, wrappers: &[String]) -> String {
+        let is_encoded = css.contains("BASE|") || css.contains("STATE|") || css.contains("CHILD|") || css.contains("COND|") || css.contains("DATA|") || css.contains("RAW|") || css.contains("ANIM|");
+        if !is_encoded {
+            if wrappers.is_empty() { return build_block(selector, css); }
+            let mut out = String::new();
+            for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, css)); out.push('\n'); }
+            if out.ends_with('\n') { out.pop(); }
+            return out;
+        }
+        let mut out = String::new();
+        let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css] };
+        let mut anim_stage_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        for line in lines {
+            if line.is_empty() { continue; }
+            if let Some(rest) = line.strip_prefix("BASE|") {
+                if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
+                else { for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, rest)); out.push('\n'); } if out.ends_with('\n') { out.pop(); } }
+                out.push('\n');
+            } else if let Some(rest) = line.strip_prefix("STATE|") {
+                let mut parts = rest.splitn(2,'|'); let state = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
+                if state == "dark" { out.push_str(&build_block(&format!(".dark {}", selector), decls)); }
+                else if state == "light" { out.push_str(&build_block(&format!(":root {}", selector), decls)); out.push('\n'); out.push_str(&build_block(&format!(".light {}", selector), decls)); }
+                else { out.push_str(&build_block(&format!("{}:{}", selector, state), decls)); }
+                out.push('\n');
+            } else if let Some(rest) = line.strip_prefix("CHILD|") {
+                let mut parts = rest.splitn(2,'|'); let child = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
+                out.push_str(&build_block(&format!("{} > {}", selector, child), decls)); out.push('\n');
+            } else if let Some(rest) = line.strip_prefix("DATA|") {
+                let mut parts = rest.splitn(2,'|'); let data = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
+                out.push_str(&build_block(&format!("{}[data-{}]", selector, data), decls)); out.push('\n');
+            } else if let Some(rest) = line.strip_prefix("COND|") {
+                let mut parts = rest.splitn(2,'|'); let cond = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
+                if let Some(val) = cond.strip_prefix("@container>") {
+                    out.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", val, build_block(selector, decls)));
+                }
+                else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) { out.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", v, build_block(selector, decls))); } }
+            } else if let Some(rest) = line.strip_prefix("ANIM|") {
+                let spec = rest; let parts: Vec<&str> = spec.split('|').collect();
+                if parts.len() >= 3 && parts[0] == "animstage" { let anim_name = format!("dxk-{:x}", seahash::hash(selector.as_bytes())); let stage = parts[1].to_string(); let toks = parts[2].to_string(); anim_stage_map.entry(anim_name).or_default().push((stage, toks)); }
+            } else if let Some(raw) = line.strip_prefix("RAW|") {
+                out.push_str(raw); if !raw.ends_with('\n') { out.push('\n'); }
+            }
+        }
+        for (name, mut stages) in anim_stage_map.into_iter() {
+            let mut froms = Vec::new(); let mut vias = Vec::new(); let mut tos = Vec::new();
+            for (stage, toks) in stages.drain(..) { match stage.as_str() { "from" => froms.push(toks), "via" => vias.push(toks), "to" => tos.push(toks), _ => {} } }
+            let resolve_util_list = |raw: &str| -> String {
+                let mut decls: Vec<String> = Vec::new();
+                for ut in raw.split('+') { let u=ut.trim(); if u.is_empty(){continue;} if let Some(rule)=self.precompiled.get(u){decls.push(rule.clone());} else if let Some(c)=self.generate_color_css(u){decls.push(c);} else if let Some(d)=self.generate_dynamic_css(u){decls.push(d);} }
+                decls.join("; ")
+            };
+            let mut frames: Vec<(u32,String)> = Vec::new();
+            if !froms.is_empty() { frames.push((0, resolve_util_list(&froms.join("+")))); }
+            if !vias.is_empty() { let count = vias.len(); for (i,v) in vias.iter().enumerate() { let pct = ((i+1) as f32)/((count+1) as f32)*100.0; frames.push((pct as u32, resolve_util_list(v))); } }
+            if !tos.is_empty() { frames.push((100, resolve_util_list(&tos.join("+")))); }
+            frames.sort_by_key(|(p,_)| *p);
+            let mut kf = String::new(); kf.push_str("@keyframes "); kf.push_str(&name); kf.push_str(" {\n"); for (pct,decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); } kf.push_str("}\n"); out.push_str(&kf);
+            out.push_str(&build_block(selector, &format!("animation: {} 1s both", name))); out.push('\n');
+        }
+        if out.ends_with('\n') { out.pop(); }
+        out
+    }
+
+    fn wrap_media_queries(&self, mut css_body: String, media_queries: &[String]) -> String {
+        for mq in media_queries.iter().rev() {
+            let mut wrapped = String::new(); wrapped.push_str(mq); wrapped.push_str(" {\n");
+            for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
+            wrapped.push('}'); css_body = wrapped;
+        }
+        css_body
+    }
+}
+
 fn build_block(selector: &str, declarations: &str) -> String {
     let mut s = String::new();
     s.push_str(selector);
     s.push_str(" {\n  ");
     // ensure single trailing semicolon inside block
-    let mut decl = declarations.trim().trim_end_matches(';').to_string();
+    let decl = declarations.trim().trim_end_matches(';').to_string();
     // split combined declarations separated by ';' and join with ';\n  ' for readability
-    if decl.contains(';') {
-        let parts: Vec<&str> = decl.split(';').filter(|p| !p.trim().is_empty()).collect();
-        s.push_str(&parts.join(";\n  "));
-        s.push_str(";\n}");
-    } else {
-        s.push_str(&decl);
-        s.push_str(";\n}");
+    let parts: Vec<&str> = if decl.contains(';') { decl.split(';').collect() } else { vec![decl.as_str()] };
+    // Deduplicate properties (last one wins) while preserving order of last occurrences
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for (i,p) in parts.iter().enumerate() { if let Some(idx)=p.find(':') { let name=p[..idx].trim(); counts.insert(name, i); } }
+    for (i,p) in parts.iter().enumerate() {
+        let p_trim = p.trim(); if p_trim.is_empty() { continue; }
+        let prop_name = p_trim.split(':').next().unwrap_or("").trim();
+        if counts.get(prop_name)==Some(&i) { // last occurrence
+            s.push_str(p_trim.trim_end_matches(';'));
+            s.push_str(";\n  ");
+        }
     }
+    if s.ends_with("\n  ") { s.truncate(s.len()-3); }
+    s.push_str("}\n");
+    while s.ends_with("\n\n") { s.pop(); }
     s
 }
 
