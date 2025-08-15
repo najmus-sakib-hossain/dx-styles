@@ -304,36 +304,33 @@ impl StyleEngine {
     }
 
     fn expand_composite(&self, class_name: &str) -> Option<String> {
-        // Composite classes start with dx-c-
         if !class_name.starts_with("dx-c-") { return None; }
-        // Retrieve tokens
-        let pairs = composites::iter_pairs();
-        for (cname, tokens) in pairs {
-            if cname == class_name {
-                // Build merged declarations concatenated by semicolons (each utility will itself expand separately; we re-query engine for each token)
-                let mut decls: Vec<String> = Vec::new();
-                for t in tokens {
-                    if let Some(rule) = self.precompiled.get(&t) {
-                        decls.push(rule.clone());
-                    } else if let Some(c) = self.generate_color_css(&t) {
-                        decls.push(c);
-                    } else if let Some(d) = self.generate_dynamic_css(&t) {
-                        decls.push(d);
-                    }
-                }
-                if decls.is_empty() { return None; }
-                // Join while stripping trailing semicolons to avoid duplication
-                let mut merged = String::new();
-                for (i, d) in decls.iter().enumerate() {
-                    let trimmed = d.trim_end_matches(';');
-                    if i > 0 { merged.push(' '); }
-                    merged.push_str(trimmed);
-                    merged.push(';');
-                }
-                return Some(merged);
+        let comp = composites::get(class_name)?;
+        let mut decls: Vec<String> = Vec::new();
+        // helper to resolve utility tokens into declarations
+        let mut resolve_tokens = |tokens: &[String]| -> Vec<String> {
+            let mut out = Vec::new();
+            for t in tokens {
+                if let Some(rule) = self.precompiled.get(t) { out.push(rule.clone()); }
+                else if let Some(c) = self.generate_color_css(t) { out.push(c); }
+                else if let Some(d) = self.generate_dynamic_css(t) { out.push(d); }
+                else if let Some(a) = self.generate_animation_css(t) { out.push(a); }
             }
+            out
+        };
+        decls.extend(resolve_tokens(&comp.base));
+        if decls.is_empty() && comp.child_rules.is_empty() && comp.conditional_blocks.is_empty() && comp.extra_raw.is_empty() {
+            return None;
         }
-        None
+        // base merged declaration string
+        let mut css = String::new();
+        if !decls.is_empty() {
+            for (i, d) in decls.iter().enumerate() { if i>0 { css.push(' ');} css.push_str(d.trim_end_matches(';')); css.push(';'); }
+        }
+        // store extended blocks temporarily; engine::compute_css* will wrap base declarations inside selector.
+        // We append extra blocks after returning by embedding a marker. Simpler: return combined declarations only for now.
+        // TODO: future enhancement - produce multi-block output accessible to generator phase.
+        Some(css)
     }
 
     #[allow(dead_code)]
@@ -476,3 +473,4 @@ impl StyleEngine {
         None
     }
 }
+

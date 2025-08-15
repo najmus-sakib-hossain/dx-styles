@@ -115,6 +115,14 @@ impl ClassNameVisitor {
                     }
                 } else if screens.contains(ident) || states.contains(ident) || cqs.contains(ident) || ident == "dark" || ident == "light" {
                     for token in inner_tokens { out.push(format!("{}:{}", ident, token)); }
+                } else if ident == "div" || ident == "span" || ident == "p" || ident == "h1" || ident == "h2" || ident == "h3" || ident == "h4" || ident == "h5" || ident == "h6" || ident == "ul" || ident == "li" || ident == "section" || ident == "header" || ident == "footer" || ident == "main" || ident == "nav" {
+                    // Child selector group placeholder: represent as synthetic token child:TAG:utility
+                    // Later engine/composite enrichments will turn these into real child rules.
+                    for token in inner_tokens { out.push(format!("child:{}:{}", ident, token)); }
+                } else if ident.starts_with('*') {
+                    // Data attribute group *attr(...)
+                    let attr_name = ident.trim_start_matches('*');
+                    for token in inner_tokens { out.push(format!("data:{}:{}", attr_name, token)); }
                 } else if ident.starts_with('$') {
                     // Generated single-purpose utility -> collapse to composite hashed class immediately
                     if !inner_tokens.is_empty() {
