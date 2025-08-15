@@ -15,6 +15,9 @@ fn normalize_generated_css(css: &str) -> String {
     // We perform a few targeted, brace-balanced transforms.
     let mut out = css.to_string();
 
+    // Pre-pass: sanitize individual class selectors so lightningcss can parse them.
+    out = sanitize_class_selectors(&out);
+
     // 1. Remove legacy hashed dx-class-* rules via balanced scan.
     out = remove_selector_blocks(&out, |sel| sel.starts_with(".dx-class-") && sel.len() >= 18);
 
@@ -38,6 +41,10 @@ fn normalize_generated_css(css: &str) -> String {
     // 4. Remove stray top-level conditional container group rules using existing structural scan.
     out = strip_top_level_container_rules(&out);
 
+    // 4b. Inside @container blocks, expand grouped synthetic selectors
+    // like .?@container>640px(bg-green-200\ text-green-900) -> .bg-green-200, .text-green-900
+    out = expand_container_group_selectors(&out);
+
     // 5. Final sanity: attempt parse / re-print; if it fails, continue with current string.
     // Use a cloned copy to avoid borrow issues when replacing `out`.
     if let Ok(parsed) = lightningcss::stylesheet::StyleSheet::parse(&out.clone(), lightningcss::stylesheet::ParserOptions::default()) {
@@ -48,6 +55,162 @@ fn normalize_generated_css(css: &str) -> String {
 
     // 6. Remove orphan selector lines (e.g. stray `.dark` left after pruning its grouped block).
     out = remove_orphan_selectors(&out);
+    out
+}
+
+// Expand selectors of the synthetic form .?@container>SIZE(token\ token2\ ... ) found inside an @container at-rule
+// into a comma-delimited list of the inner tokens as standalone class selectors.
+fn expand_container_group_selectors(input: &str) -> String {
+    if !input.contains("?@container>") { return input.to_string(); }
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    while i < bytes.len() {
+        if bytes[i] == b'.' {
+            let sel_start = i;
+            // Find first '(' or escaped \(
+            let mut j = i + 1;
+            let mut paren_pos: Option<usize> = None;
+            while j < bytes.len() {
+                if bytes[j] == b'(' { paren_pos = Some(j); break; }
+                if bytes[j] == b'\\' && j + 1 < bytes.len() && bytes[j+1] == b'(' { paren_pos = Some(j); break; }
+                if matches!(bytes[j], b'{' | b'\n') { break; }
+                j += 1;
+            }
+            if let Some(p_pos) = paren_pos {
+                // Raw or escaped open paren
+                let escaped_paren = bytes[p_pos] == b'\\';
+                let open_paren_idx = if escaped_paren { p_pos + 1 } else { p_pos }; // index of actual '('
+                // Selector head substring
+                let head = &input[sel_start..open_paren_idx];
+                // Build a de-escaped copy for matching
+                let mut marker = String::with_capacity(head.len());
+                let mut chars = head.chars().peekable();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\' { if let Some(nc) = chars.next() { marker.push(nc); } else { break; } } else { marker.push(ch); }
+                }
+                if marker.starts_with(".?@container>") {
+                    // Scan for closing ) or \) balancing only depth 0 (no nesting expected)
+                    let mut k = open_paren_idx + 1; // after '('
+                    let mut close_idx: Option<usize> = None;
+                    while k < bytes.len() {
+                        if bytes[k] == b'\\' {
+                            if k + 1 < bytes.len() {
+                                if bytes[k + 1] == b')' { close_idx = Some(k + 1); break; }
+                                k += 2; continue;
+                            } else { break; }
+                        }
+                        if bytes[k] == b')' { close_idx = Some(k); break; }
+                        if bytes[k] == b'{' || bytes[k] == b'\n' { break; }
+                        k += 1;
+                    }
+                    if let Some(c_idx) = close_idx {
+                        // Next non-space char after ) should be '{'
+                        let mut after = c_idx + 1;
+                        while after < bytes.len() && bytes[after].is_ascii_whitespace() { after += 1; }
+                        if after < bytes.len() && bytes[after] == b'{' {
+                            // Extract inner tokens between open_paren_idx+1 and c_idx
+                            let inner = &input[open_paren_idx+1..c_idx];
+                            // Tokens separated by escaped space sequences '\ '
+                            let raw_tokens: Vec<&str> = if inner.contains("\\ ") {
+                                inner.split("\\ ").filter(|t| !t.is_empty()).collect()
+                            } else {
+                                inner.split_whitespace().filter(|t| !t.is_empty()).collect()
+                            };
+                            if !raw_tokens.is_empty() {
+                                out.push_str(&input[..sel_start]); // content up to selector
+                                // Ensure we haven't duplicated earlier content
+                                if sel_start > 0 { let already = out.len(); if already < sel_start { out.push_str(&input[out.len()..sel_start]); } }
+                                let mut first = true;
+                                for tok in raw_tokens {
+                                    if !first { out.push_str(", "); } else { first = false; }
+                                    // Remove remaining escape backslashes
+                                    let mut cleaned = String::new();
+                                    let mut tchars = tok.chars().peekable();
+                                    while let Some(tc) = tchars.next() {
+                                        if tc == '\\' { if let Some(&nc) = tchars.peek() { if nc == ' ' { tchars.next(); continue; } else { cleaned.push(nc); tchars.next(); continue; } } else { continue; } }
+                                        cleaned.push(tc);
+                                    }
+                                    out.push('.');
+                                    out.push_str(&cleaned);
+                                }
+                                out.push_str(" {");
+                                // Advance i to after '{'
+                                i = after + 1; // position after '{'
+                                continue; // skip default copy for consumed slice
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Default copy path
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    if i < bytes.len() { out.push_str(&input[i..]); }
+    out
+}
+
+// Insert missing CSS escapes for characters inside class selectors that are not valid ident chars.
+// We purposefully do a lightweight single-pass scan rather than a heavy regex to avoid
+// accidentally touching numeric literals (e.g. 1.5rem) or URLs.
+// A class selector begins with '.' whose previous non-newline char is a selector delimiter
+// (start / whitespace / combinator / comma / opening brace / another delimiter).
+// We then read until a terminating delimiter for the simple selector.
+fn sanitize_class_selectors(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut last_written = 0usize;
+    let mut out = String::with_capacity(input.len());
+    while i < bytes.len() {
+        if bytes[i] == b'.' {
+            let prev = if i == 0 { b'\n' } else { bytes[i.saturating_sub(1)] };
+            // Delimiters that allow a class selector start. Exclude ':' so we don't match pseudo classes after element names
+            // but allow cases like space, combinators, newline, '{', ','.
+            if matches!(prev, b'\n' | b' ' | b'\t' | b'{' | b'}' | b',' | b'>' | b'+' | b'~') {
+                let start = i + 1; // after '.'
+                let mut j = start;
+                // Read ident segment (stop at selector / group delimiters)
+                while j < bytes.len() {
+                    let c = bytes[j];
+                    if matches!(c, b' ' | b'\n' | b'\t' | b'{' | b'}' | b',' | b'>' | b'+' | b'~' | b':' | b'[') { break; }
+                    // If escape, skip next char if any (already escaped)
+                    if c == b'\\' { j += 1; if j < bytes.len() { j += 1; } else { break; } continue; }
+                    j += 1;
+                }
+                if j > start { // we have a candidate ident
+                    let ident = &input[start..j];
+                    let mut needs_change = false;
+                    let mut sanitized = String::with_capacity(ident.len() + 8);
+                    let mut chars = ident.chars().peekable();
+                    while let Some(ch) = chars.next() {
+                        if ch == '\\' { // preserve existing escape and next char verbatim
+                            sanitized.push(ch);
+                            if let Some(nc) = chars.next() { sanitized.push(nc); }
+                            continue;
+                        }
+                        let valid = matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_');
+                        if !valid {
+                            needs_change = true;
+                            sanitized.push('\\');
+                        }
+                        sanitized.push(ch);
+                    }
+                    if needs_change {
+                        out.push_str(&input[last_written..i+1]); // include the '.'
+                        out.push_str(&sanitized);
+                        last_written = j;
+                    }
+                    i = j;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    if last_written == 0 { return input.to_string(); }
+    out.push_str(&input[last_written..]);
     out
 }
 
@@ -334,5 +497,24 @@ mod tests {
         let first_idx = out.find(".?@container>640px(foo)");
         let nested_idx = out.rfind(".?@container>640px(foo)");
         assert_eq!(first_idx, nested_idx, "only nested container rule should remain: {out}");
+    }
+
+    #[test]
+    fn sanitizes_invalid_selector_chars() {
+        // Contains parentheses inside the class name which must be escaped already; ensure we don't double escape
+        let input = ".foo(bar){color:red;}\n.font-bold{font-weight:700;}";
+        let out = normalize_generated_css(input);
+        // lightningcss should parse sanitized output
+        assert!(StyleSheet::parse(&out, ParserOptions::default()).is_ok(), "sanitized CSS failed to parse: {out}");
+    }
+
+    #[test]
+    fn expands_container_group_selectors() {
+        let input = "@container (min-width:640px){.?@container>640px(foo\\ bar\\ baz){color:red;}}";
+        let out = normalize_generated_css(input);
+        // Expect replacement selectors .foo, .bar, .baz
+        assert!(out.contains(".foo, .bar, .baz"), "expected expanded selectors, got: {out}");
+        assert!(!out.contains(".?@container>640px"), "synthetic selector should be removed: {out}");
+        assert!(StyleSheet::parse(&out, ParserOptions::default()).is_ok(), "expanded CSS not parseable: {out}");
     }
 }
