@@ -281,7 +281,7 @@ impl StyleEngine {
     }
 
     fn expand_composite(&self, class_name: &str) -> Option<String> {
-        if !class_name.starts_with("dx-c-") { return None; }
+    if !class_name.starts_with("dx-class-") { return None; }
         let comp = composites::get(class_name)?;
         // helper closure to resolve utility tokens into declarations
         let resolve_tokens = |tokens: &[String]| -> Vec<String> {
@@ -322,7 +322,8 @@ impl StyleEngine {
                 } else if let Some(rest) = t.strip_prefix("motion:") {
                     let hash = format!("{:x}", seahash::hash(rest.as_bytes()));
                     // Produce physics-inspired keyframes (overshoot) and animation reference
-                    let kf_name = format!("dx-motion-{}", &hash[..6]);
+                    // Verbose physics motion keyframe name
+                    let kf_name = format!("dx-motion-keyframe-{}", &hash[..6]);
                     let mut keyframes = String::from("@keyframes "); keyframes.push_str(&kf_name); keyframes.push_str(" {\n  0% { transform: translateY(0) scale(1); }\n  60% { transform: translateY(-6px) scale(1.04); }\n  80% { transform: translateY(2px) scale(0.98); }\n  100% { transform: translateY(0) scale(1); }\n}\n");
                     out.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
                     out.push(keyframes); // Will be emitted as RAW block
@@ -566,7 +567,13 @@ impl StyleEngine {
                 }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
                 let spec = rest; let parts: Vec<&str> = spec.split('|').collect();
-                if parts.len() >= 3 && parts[0] == "animstage" { let anim_name = format!("dxk-{:x}", seahash::hash(selector.as_bytes())); let stage = parts[1].to_string(); let toks = parts[2].to_string(); anim_stage_map.entry(anim_name).or_default().push((stage, toks)); }
+                if parts.len() >= 3 && parts[0] == "animstage" {
+                    // Verbose keyframe identifier for clarity and uniqueness
+                    let anim_name = format!("dx-keyframe-{:x}", seahash::hash(selector.as_bytes()));
+                    let stage = parts[1].to_string();
+                    let toks = parts[2].to_string();
+                    anim_stage_map.entry(anim_name).or_default().push((stage, toks));
+                }
             } else if let Some(raw) = line.strip_prefix("RAW|") {
                 out.push_str(raw); if !raw.ends_with('\n') { out.push('\n'); }
             }

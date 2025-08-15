@@ -88,7 +88,7 @@ light = ".light &"
 #  {perc}  -> percentage used by via: entries
 # -----------------------------------------------------------------------------
 [animation_generators]
-"animate" = "animation-name: dx-anim-{hash}; animation-duration: {value1|1s}; animation-delay: {value2|0s};"
+"animate" = "animation-name: dx-animation-name-{hash}; animation-duration: {value1|1s}; animation-delay: {value2|0s};"
 "from" = "0% {{ {rules} }}"
 "to" = "100% {{ {rules} }}"
 "via" = "{perc}% {{ {rules} }}"

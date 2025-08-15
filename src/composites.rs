@@ -70,7 +70,8 @@ pub fn get_or_create_full(c: Composite) -> String {
     let hash = hash_composite(&c);
     let mut reg = REGISTRY.write().unwrap();
     if let Some(existing) = reg.map.get(&hash) { return existing.clone(); }
-    let class_name = format!("dx-c-{}", &hash[..8.min(hash.len())]);
+    // Verbose class prefix for clarity
+    let class_name = format!("dx-class-{}", &hash[..8.min(hash.len())]);
     reg.map.insert(hash, class_name.clone());
     reg.data.insert(class_name.clone(), c);
     class_name
