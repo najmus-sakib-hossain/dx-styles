@@ -16,6 +16,7 @@ fn normalize_generated_css(css: &str) -> String {
 
     // Pre-pass: sanitize individual class selectors so lightningcss can parse them.
     out = sanitize_class_selectors(&out);
+    
 
     // 1. Remove legacy hashed dx-class-* rules via balanced scan.
     out = remove_selector_blocks(&out, |sel| sel.starts_with(".dx-class-") && sel.len() >= 18);
@@ -53,6 +54,9 @@ fn normalize_generated_css(css: &str) -> String {
 
     // 3b. Simplify known public group patterns .card\(tokens\){ -> .card { ... }
     out = simplify_known_group_patterns(&out);
+
+    // 3b2. Simplify parametric symbol utilities like .\~text\(values\){ -> .\~text { ... }
+    out = simplify_parametric_symbol_groups(&out);
 
     // 3c. Simplify grouped parent selectors used only as a wrapper in child selectors:
     // e.g. .div\(h1\(font-bold\)\ p\(mt-2\)\) > h1 { ... } -> .div > h1 { ... }
@@ -362,6 +366,70 @@ fn simplify_known_group_patterns(input: &str) -> String {
                             i = k + 1; // advance past '{'
                             last_emitted = i;
                             continue;
+                        }
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    if last_emitted == 0 { return input.to_string(); }
+    if last_emitted < input.len() { out.push_str(&input[last_emitted..]); }
+    out
+}
+
+// Simplify parametric utilities beginning with an escaped leading symbol (e.g. .\~text\(min\@md, max\@xl\){ ) to just .\~text { ... }
+fn simplify_parametric_symbol_groups(input: &str) -> String {
+    const BASE_NAMES: &[&str] = &["text"]; // extendable
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    let mut last_emitted = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'.' {
+            let dot = i;
+            let mut cursor = i + 1;
+            if cursor < bytes.len() && bytes[cursor] == b'\\' && cursor + 1 < bytes.len() {
+                let sym = bytes[cursor + 1];
+                if sym == b'~' { // candidate symbol
+                    cursor += 2; // skip escape + symbol
+                    let name_start = cursor;
+                    while cursor < bytes.len() {
+                        let c = bytes[cursor];
+                        if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { cursor += 1; continue; }
+                        break;
+                    }
+                    if cursor > name_start && cursor + 1 < bytes.len() && bytes[cursor] == b'\\' && bytes[cursor + 1] == b'(' {
+                        let base = &input[name_start..cursor];
+                        if BASE_NAMES.iter().any(|n| *n == base) {
+                            // Scan balanced grouping
+                            let mut depth = 1i32; // we are after \(
+                            let mut j = cursor + 2;
+                            let mut closed = false;
+                            while j + 1 < bytes.len() && depth > 0 {
+                                if bytes[j] == b'\\' {
+                                    if j + 1 < bytes.len() {
+                                        let n = bytes[j + 1];
+                                        if n == b'(' { depth += 1; j += 2; continue; }
+                                        if n == b')' { depth -= 1; j += 2; if depth == 0 { closed = true; break; } continue; }
+                                        j += 2; continue;
+                                    } else { break; }
+                                }
+                                if bytes[j] == b'{' { break; }
+                                j += 1;
+                            }
+                            if closed {
+                                let mut k = j;
+                                while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') { k += 1; }
+                                if k < bytes.len() && bytes[k] == b'{' {
+                                    if dot > last_emitted { out.push_str(&input[last_emitted..dot]); }
+                                    out.push_str(&input[dot..cursor]); // .\~text
+                                    out.push_str(" {");
+                                    i = k + 1;
+                                    last_emitted = i;
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }
@@ -903,5 +971,13 @@ mod tests {
         assert!(out.contains(".div > h1"), "h1 selector collapsed: {out}");
         assert!(out.contains(".div > p"), "p selector collapsed: {out}");
         assert!(!out.contains("p\\(mt-2"), "Inner grouping removed: {out}");
+    }
+
+    #[test]
+    fn simplifies_parametric_symbol_group() {
+        let input = ".\\~text\\(2.25rem\\@md,\\ 3rem\\@xl\\){font-size:clamp(2.25rem, calc(2.25rem + 0.75 * (100vw - 768px) / (1280 - 768)), 3rem);}";
+        let out = normalize_generated_css(input);
+    assert!(out.contains(".\\~text {") || out.contains(".\\~text{"), "Expected simplified parametric symbol group: {out}");
+        assert!(!out.contains("~text\\(2.25rem"), "Grouping suffix should be removed: {out}");
     }
 }
