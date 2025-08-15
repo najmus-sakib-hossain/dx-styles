@@ -238,49 +238,49 @@ fn simplify_local_component_groups(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut i = 0usize;
     let mut out = String::with_capacity(input.len());
-    let mut last_copy = 0usize;
+    let mut last_emitted = 0usize;
     while i < bytes.len() {
-        if bytes[i] == b'.' && i + 2 < bytes.len() && bytes[i+1] == b'_' {
-            let start_sel = i;
-            let mut j = i + 2;
-            while j < bytes.len() {
-                let c = bytes[j];
-                if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { j += 1; continue; }
+        if bytes[i] == b'.' && i + 2 < bytes.len() && bytes[i + 1] == b'_' {
+            let ident_start = i + 2;
+            let mut ident_end = ident_start;
+            while ident_end < bytes.len() {
+                let c = bytes[ident_end];
+                if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { ident_end += 1; continue; }
                 break;
             }
-            // Expect escaped paren sequence \(
-            if j + 1 < bytes.len() && bytes[j] == b'\\' && bytes[j+1] == b'(' {
-                j += 2; // skip \(
-                // scan until closing \)
+            // Expect escaped '(' sequence after identifier
+            if ident_end + 1 < bytes.len() && bytes[ident_end] == b'\\' && bytes[ident_end + 1] == b'(' {
+                let mut j = ident_end + 2; // skip \(
+                let mut closed = false;
                 while j + 1 < bytes.len() {
                     if bytes[j] == b'\\' {
-                        if j + 1 < bytes.len() && bytes[j+1] == b')' { j += 2; break; }
+                        if j + 1 < bytes.len() && bytes[j + 1] == b')' { j += 2; closed = true; break; }
                         j += 2; continue;
                     }
-                    // safety break if unexpected block start
-                    if bytes[j] == b'{' { break; }
+                    if bytes[j] == b'{' { break; } // malformed grouping, abort
                     j += 1;
                 }
-                // skip whitespace
-                let mut k = j;
-                while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') { k += 1; }
-                if k < bytes.len() && bytes[k] == b'{' {
-                    // perform replacement
-                    out.push_str(&input[last_copy..start_sel]);
-                    // copy ._name
-                    out.push_str(&input[start_sel..start_sel + 2]); // ._
-                    out.push_str(&input[start_sel + 2 .. start_sel + 2 + (j - (start_sel + 2) - 2)]); // identifier minus grouping
-                    out.push_str(" {");
-                    i = k + 1; // move past '{'
-                    last_copy = i;
-                    continue;
+                if closed {
+                    // Skip whitespace until '{'
+                    let mut k = j;
+                    while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') { k += 1; }
+                    if k < bytes.len() && bytes[k] == b'{' {
+                        // Emit preceding untouched segment
+                        if i > last_emitted { out.push_str(&input[last_emitted..i]); }
+                        // Emit simplified selector ._identifier {
+                        out.push_str(&input[i..ident_end]); // ._name
+                        out.push_str(" {");
+                        i = k + 1; // move past '{'
+                        last_emitted = i;
+                        continue;
+                    }
                 }
             }
         }
         i += 1;
     }
-    if last_copy == 0 { return input.to_string(); }
-    out.push_str(&input[last_copy..]);
+    if last_emitted == 0 { return input.to_string(); }
+    if last_emitted < input.len() { out.push_str(&input[last_emitted..]); }
     out
 }
 
@@ -586,5 +586,13 @@ mod tests {
         assert!(out.contains(".foo, .bar, .baz"), "expected expanded selectors, got: {out}");
         assert!(!out.contains(".?@container>640px"), "synthetic selector should be removed: {out}");
         assert!(StyleSheet::parse(&out, ParserOptions::default()).is_ok(), "expanded CSS not parseable: {out}");
+    }
+
+    #[test]
+    fn simplifies_local_component_group() {
+        let input = "._highlight\\(bg-yellow-200\\ text-yellow-900\\){color:red;}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains("._highlight {"), "Expected simplified selector, got: {out}");
+        assert!(!out.contains("_highlight\\(bg"), "Grouping suffix should be removed: {out}");
     }
 }
