@@ -1,53 +1,49 @@
-.max-w-5xl {
-  max-width: 64rem;
-}
-
 .font-bold {
   font-weight: 700;
-}
-
-.font-semibold {
-  font-weight: 600;
-}
-
-.border-dashed {
-  border-style: dashed;
-}
-
-.w-full {
-  width: 100%;
 }
 
 .text-2xl {
   font-size: 1.5rem;
 }
 
-.resize-x {
-  resize: horizontal;
+.dx-class-6784c268>div {
+  margin-top: 1rem;
+}
+
+.dx-class-ea87ae22 {
+  font-size: 1.125rem;
+  color: oklch(44.6% .03 256.802);
+}
+
+.dark .dx-class-ea87ae22 {
+  color: oklch(70.7% .022 261.325);
 }
 
 .max-w-full {
   max-width: 100%;
 }
 
-.mt-2 {
-  margin-top: .5rem;
+.max-w-5xl {
+  max-width: 64rem;
 }
 
-.container-type-inline-size {
-  container-type: inline-size;
+.dx-class-d48a381b {
+  padding: 1.5rem;
+  border-radius: .5rem;
+  background-color: oklch(88.2% .059 254.128);
+  color: oklch(37.9% .146 265.522);
 }
 
-.p-4 {
-  padding: 1rem;
+@container (width >=640px) {
+  .dx-class-d48a381b {
+    background-color: oklch(92.5% .084 155.995);
+    color: oklch(39.3% .095 152.535);
+  }
 }
 
-.overflow-auto {
-  overflow: auto;
-}
-
-.mb-4 {
-  margin-bottom: 1rem;
+.dx-class-d48a381b:has(> :nth-last-child(n+2):first-child) {
+  background-color: oklch(94.5% .129 101.54);
+  color: oklch(42.1% .095 57.708);
 }
 
 .dx-class-27734a5f {
@@ -58,84 +54,59 @@
   margin-top: 2rem;
 }
 
-.dx-class-c7d60622 {
-  padding: 2rem;
-  backdrop-filter: blur(16px);
-  border-radius: .75rem;
-  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
-}
-
-.dx-class-c7d60622 > h1 {
-  font-weight: 700;
-}
-
-.dx-class-c7d60622 > p {
-  margin-top: .5rem;
-}
-
-.dx-class-6b72624c {
-  min-height: 100vh;
-  width: 100vw;
+.dx-class-f4b7f9c9 {
   padding: 1rem;
-  color: oklch(27.8% .033 256.848);
-  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
-  background-size: cover;
-  background-blend-mode: screen, lighten;
-  animation-name: dx-animation-name-782ee2f3ad223990;
-  animation-duration: 1s;
-  animation-delay: 0s;
-}
-
-.dark .dx-class-6b72624c {
-  color: oklch(92.8% .006 264.531);
-}
-
-@media (width >= 1024px) {
-  .dx-class-6b72624c {
-    padding: 2rem;
-  }
-}
-
-@keyframes dx-keyframe-a5a64beb4cb0d47 {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
-.dx-class-6b72624c {
-  animation: 1s both dx-keyframe-a5a64beb4cb0d47;
-}
-
-.dx-class-d48a381b {
-  padding: 1.5rem;
   border-radius: .5rem;
-  background-color: oklch(88.2% .059 254.128);
-  color: oklch(37.9% .146 265.522);
 }
 
-@container (width >= 640px) {
-  .dx-class-d48a381b {
-    background-color: oklch(92.5% .084 155.995);
-    color: oklch(39.3% .095 152.535);
+.dx-class-f4b7f9c9:focus {
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #8b5cf6;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.dx-class-791abefe {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+@container (width >=640px) {
+  .dx-class-791abefe {
+    font-size: 1.25rem;
   }
 }
 
-.dx-class-d48a381b:has( > :nth-last-child(n+2):first-child) {
-  background-color: oklch(94.5% .129 101.54);
-  color: oklch(42.1% .095 57.708);
+.dx-class-b5635c9e {
+  font-size: clamp(2.25rem, 2.25rem + .146484vw - 1.125px, 3rem);
 }
 
-.dx-class-ea87ae22 {
-  font-size: 1.125rem;
-  color: oklch(44.6% .03 256.802);
+.dx-class-2bed0f40 {
+  padding: 1.5rem;
+  background-color: oklch(62.7% .265 303.9);
+  border-radius: .5rem;
+  width: 8rem;
+  animation: .6s cubic-bezier(.34, 1.56, .64, 1) dx-motion-keyframe-8e548e;
 }
 
-.dark .dx-class-ea87ae22 {
-  color: oklch(70.7% .022 261.325);
+.dx-class-2bed0f40:hover {
+  --transform-scale-x: 1.1;
+  --transform-scale-y: 1.1;
 }
 
 .dx-class-b85332e1 {
@@ -162,51 +133,80 @@
   cursor: wait;
 }
 
-.dx-class-f4b7f9c9 {
-  padding: 1rem;
-  border-radius: .5rem;
+.border-dashed {
+  border-style: dashed;
 }
 
-.dx-class-f4b7f9c9:focus {
-  outline: 2px solid #0000;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px #8b5cf6;
+.dx-class-6b72624c {
+  min-height: 100vh;
+  width: 100vw;
+  padding: 1rem;
+  color: oklch(27.8% .033 256.848);
+  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
+  background-size: cover;
+  background-blend-mode: screen, lighten;
+  animation-name: dx-animation-name-782ee2f3ad223990;
+  animation-duration: 1s;
+  animation-delay: 0s;
+}
+
+.dark .dx-class-6b72624c {
+  color: oklch(92.8% .006 264.531);
+}
+
+@media (width >=1024px) {
+  .dx-class-6b72624c {
+    padding: 2rem;
+  }
+}
+
+@keyframes dx-keyframe-a5a64beb4cb0d47 {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.dx-class-6b72624c {
+  animation: 1s both dx-keyframe-a5a64beb4cb0d47;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.mt-2 {
+  margin-top: .5rem;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.dx-class-c7d60622 {
+  padding: 2rem;
+  backdrop-filter: blur(16px);
+  border-radius: .75rem;
+  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
+}
+
+.dx-class-c7d60622>h1 {
+  font-weight: 700;
+}
+
+.dx-class-c7d60622>p {
+  margin-top: .5rem;
+}
+
+.p-4 {
+  padding: 1rem;
 }
 
 .dx-class-21121286 {
   outline: 2px solid #0000;
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #8b5cf6;
-}
-
-.dx-class-791abefe {
-  font-weight: 700;
-  font-size: 1.125rem;
-}
-
-@container (width >= 640px) {
-  .dx-class-791abefe {
-    font-size: 1.25rem;
-  }
-}
-
-.dx-class-2bed0f40 {
-  padding: 1.5rem;
-  background-color: oklch(62.7% .265 303.9);
-  border-radius: .5rem;
-  width: 8rem;
-  animation: .6s cubic-bezier(.34, 1.56, .64, 1) dx-motion-keyframe-8e548e;
-}
-
-.dx-class-2bed0f40:hover {
-  --transform-scale-x: 1.1;
-  --transform-scale-y: 1.1;
-}
-
-.dx-class-6784c268 > div {
-  margin-top: 1rem;
-}
-
-.dx-class-b5635c9e {
-  font-size: clamp(2.25rem, 2.25rem + .146484vw - 1.125px, 3rem);
 }

@@ -77,10 +77,9 @@ pub fn append_new_classes(
     let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
     let estimated: usize = rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
     let mut buffer = String::with_capacity(estimated);
-    // Ensure at most one blank line separation from existing content.
     if need_leading { buffer.push('\n'); }
     for (i, rule) in rules.iter().enumerate() {
-    if i > 0 { buffer.push_str("\n\n"); } // keep single blank line between new rules themselves
+    if i > 0 { buffer.push_str("\n\n"); }
         buffer.push_str(rule);
     }
     let _ = file.write_all(buffer.as_bytes());

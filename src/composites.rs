@@ -2,36 +2,20 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-// Rich composite structure supporting:
-// - base declarations (utility tokens)
-// - child rules: (selector suffix, utility tokens)
-// - conditional blocks: (at-rule, utility tokens) where selector injected
-// - extra raw blocks: fully formed CSS blocks (e.g. @keyframes)
-//
-// Tokens are stored (not resolved) so the engine can reuse existing resolution logic.
 #[derive(Clone, Debug, Default)]
 pub struct Composite {
-    // Declarations that apply directly to the base selector.
     pub base: Vec<String>,
-    // (child_selector_suffix, tokens) => .class > child_selector_suffix
     pub child_rules: Vec<(String, Vec<String>)>,
-    // (pseudo_or_state, tokens) => .class:pseudo_or_state
     pub state_rules: Vec<(String, Vec<String>)>,
-    // (data-attr, tokens) => .class[data-attr]
     pub data_attr_rules: Vec<(String, Vec<String>)>,
-    // (at_rule, tokens) => at-rule wrapping .class { tokens }
     pub conditional_blocks: Vec<(String, Vec<String>)>,
-    // Raw extra CSS blocks fully formed (e.g. @keyframes ...)
     pub extra_raw: Vec<String>,
-    // Encoded animation keyframe spec strings (animkf|name|stage|token token|stage|...)
     pub animations: Vec<String>,
 }
 
 #[derive(Default)]
 struct CompositeRegistry {
-    // hash -> assigned class name
     map: HashMap<String, String>,
-    // class name -> composite
     data: HashMap<String, Composite>,
 }
 
@@ -41,7 +25,6 @@ fn hash_composite(c: &Composite) -> String {
     use seahash::SeaHasher;
     use std::hash::{Hash, Hasher};
     let mut h = SeaHasher::new();
-    // canonicalize by sorting copies (order-insensitive dedupe for now)
     let mut base = c.base.clone(); base.sort(); base.hash(&mut h);
     let mut childs: Vec<String> = c.child_rules.iter().map(|(s, toks)| {
         let mut t = toks.clone(); t.sort(); format!("{}=>{}", s, t.join(","))
@@ -61,7 +44,6 @@ fn hash_composite(c: &Composite) -> String {
 }
 
 pub fn get_or_create(tokens: &[String]) -> String {
-    // Backwards compatibility helper: only base tokens.
     let composite = Composite { base: tokens.to_vec(), ..Default::default() };
     get_or_create_full(composite)
 }
@@ -70,7 +52,6 @@ pub fn get_or_create_full(c: Composite) -> String {
     let hash = hash_composite(&c);
     let mut reg = REGISTRY.write().unwrap();
     if let Some(existing) = reg.map.get(&hash) { return existing.clone(); }
-    // Verbose class prefix for clarity
     let class_name = format!("dx-class-{}", &hash[..8.min(hash.len())]);
     reg.map.insert(hash, class_name.clone());
     reg.data.insert(class_name.clone(), c);

@@ -202,7 +202,6 @@ impl StyleEngine {
                 } else if let Some(state_value) = self.states.get(part) {
                     if state_value.contains('&') { wrappers.push(state_value.to_string()); } else { pseudo_classes.push_str(state_value); }
                 } else if part == "dark" {
-                    // Themable ancestor support: wrap selector later as .dark .class
                     wrappers.push(".dark &".to_string());
                 } else if part == "light" {
                     wrappers.push(":root &".to_string());
@@ -283,7 +282,6 @@ impl StyleEngine {
     fn expand_composite(&self, class_name: &str) -> Option<String> {
     if !class_name.starts_with("dx-class-") { return None; }
         let comp = composites::get(class_name)?;
-        // helper closure to resolve utility tokens into declarations
         let resolve_tokens = |tokens: &[String]| -> Vec<String> {
             let mut out = Vec::new();
             for t in tokens {
@@ -298,38 +296,31 @@ impl StyleEngine {
                         let lookup_bp = |key: &str| -> Option<f32> {
                             if key.chars().all(|c| c.is_ascii_digit()) { return key.parse::<f32>().ok(); }
                             self.screens.get(key).and_then(|v| {
-                                // expect something like 768px
                                 if let Some(px) = v.strip_suffix("px") { px.parse().ok() } else { None }
                             })
                         };
                         if let (Some(min_bp), Some(max_bp)) = (lookup_bp(min_bp_key), lookup_bp(max_bp_key)) {
-                            // Extract numeric values (assuming rem or px). Leave original units in endpoints.
                             let parse_val = |val: &str| -> Option<f32> {
                                 let digits: String = val.chars().take_while(|c| (c.is_ascii_digit() || *c == '.')).collect();
                                 digits.parse().ok()
                             };
                             if let (Some(min_num), Some(max_num)) = (parse_val(min_v), parse_val(max_v)) {
-                                // Use vw based interpolation anchored between min_bp and max_bp
                                 let formula = format!("clamp({}, calc({} + {} * (100vw - {}px) / ({} - {})), {})", min_v, min_v, (max_num - min_num), min_bp, max_bp, min_bp, max_v);
                                 out.push(format!("{}: {}", prop, formula));
                                 continue;
                             }
                         }
-                        // fallback basic clamp
                         out.push(format!("{}: clamp({}, {}, {})", prop, min_v, min_v, max_v));
                         continue;
                     }
                 } else if let Some(rest) = t.strip_prefix("motion:") {
                     let hash = format!("{:x}", seahash::hash(rest.as_bytes()));
-                    // Produce physics-inspired keyframes (overshoot) and animation reference
-                    // Verbose physics motion keyframe name
                     let kf_name = format!("dx-motion-keyframe-{}", &hash[..6]);
                     let mut keyframes = String::from("@keyframes "); keyframes.push_str(&kf_name); keyframes.push_str(" {\n  0% { transform: translateY(0) scale(1); }\n  60% { transform: translateY(-6px) scale(1.04); }\n  80% { transform: translateY(2px) scale(0.98); }\n  100% { transform: translateY(0) scale(1); }\n}\n");
                     out.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
                     out.push(keyframes); // Will be emitted as RAW block
                     continue;
                 } else if let Some(rest) = t.strip_prefix("gradient:mesh:") {
-                    // Refined mesh gradient using golden-angle (Vogel) distribution for smoother layout
                     let colors: Vec<&str> = rest.split('+').filter(|c| !c.trim().is_empty()).collect();
                     if colors.len() >= 2 {
                         let phi = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
@@ -474,7 +465,6 @@ impl StyleEngine {
         None
     }
 
-    // Generate color utilities bg-* and text-* from colors table
     fn generate_color_css(&self, class_name: &str) -> Option<String> {
         if let Some(name) = class_name.strip_prefix("bg-") {
             if let Some(val) = self.colors.get(name) { return Some(format!("background-color: {}", val)); }
@@ -485,22 +475,15 @@ impl StyleEngine {
         None
     }
 
-    // Parse animation sentence utilities. This is an initial minimal implementation:
-    // animate:duration[:delay] + optional from:/to:/via: pieces.
     fn generate_animation_css(&self, full_class: &str) -> Option<String> {
         if !full_class.contains("animate:") { return None; }
-        // Split on spaces not present in a single class (classes are single tokens). We only process the animate:* token here.
-        // Pattern: [state prefixes already handled]:animate:dur[:delay]
         let parts: Vec<&str> = full_class.split(':').collect();
-        // find "animate" position
         let pos = parts.iter().position(|p| *p == "animate")?;
-        // duration in next segment if exists
         let duration = parts.get(pos + 1).unwrap_or(&"1s");
         let mut delay = "0s";
         if let Some(next) = parts.get(pos + 2) {
             if next.ends_with("ms") || next.ends_with('s') { delay = next; }
         }
-        // Basic hash (poor mans) - could hash the class string
         let hash = format!("{:x}", seahash::hash(full_class.as_bytes()));
         if let Some(tpl) = self.animation_templates.get("animate") {
             let out = tpl.replace("{hash}", &hash)
@@ -511,8 +494,6 @@ impl StyleEngine {
         None
     }
 }
-
-// Helpers ------------------------------------------------------------------
 
 impl StyleEngine {
     fn decode_encoded_css(&self, css: &str, selector: &str, wrappers: &[String]) -> String {
@@ -552,15 +533,11 @@ impl StyleEngine {
                 }
                 else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) { out.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", v, build_block(selector, decls))); } }
                 else if let Some(rest) = cond.strip_prefix("self:child-count>") {
-                    // Exact >= threshold semantics using :has(> :nth-last-child(n+X):first-child)
                     if let Ok(threshold) = rest.parse::<usize>() {
                         if threshold > 0 {
-                            // CSS pattern to match parent with at least threshold children:
-                            // :has(> :nth-last-child(n+THRESHOLD):first-child)
                             let hashed = format!("{}:has(> :nth-last-child(n+{}):first-child)", selector, threshold);
                             out.push_str(&build_block(&hashed, decls)); out.push('\n');
                         } else {
-                            // threshold 0 => always applies, fall back to base selector wrapper
                             out.push_str(&build_block(selector, decls)); out.push('\n');
                         }
                     }
@@ -568,7 +545,6 @@ impl StyleEngine {
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
                 let spec = rest; let parts: Vec<&str> = spec.split('|').collect();
                 if parts.len() >= 3 && parts[0] == "animstage" {
-                    // Verbose keyframe identifier for clarity and uniqueness
                     let anim_name = format!("dx-keyframe-{:x}", seahash::hash(selector.as_bytes()));
                     let stage = parts[1].to_string();
                     let toks = parts[2].to_string();
@@ -612,17 +588,14 @@ fn build_block(selector: &str, declarations: &str) -> String {
     let mut s = String::new();
     s.push_str(selector);
     s.push_str(" {\n  ");
-    // ensure single trailing semicolon inside block
     let decl = declarations.trim().trim_end_matches(';').to_string();
-    // split combined declarations separated by ';' and join with ';\n  ' for readability
     let parts: Vec<&str> = if decl.contains(';') { decl.split(';').collect() } else { vec![decl.as_str()] };
-    // Deduplicate properties (last one wins) while preserving order of last occurrences
     let mut counts: HashMap<&str, usize> = HashMap::new();
     for (i,p) in parts.iter().enumerate() { if let Some(idx)=p.find(':') { let name=p[..idx].trim(); counts.insert(name, i); } }
     for (i,p) in parts.iter().enumerate() {
         let p_trim = p.trim(); if p_trim.is_empty() { continue; }
         let prop_name = p_trim.split(':').next().unwrap_or("").trim();
-        if counts.get(prop_name)==Some(&i) { // last occurrence
+        if counts.get(prop_name)==Some(&i) {
             s.push_str(p_trim.trim_end_matches(';'));
             s.push_str(";\n  ");
         }
@@ -635,17 +608,13 @@ fn build_block(selector: &str, declarations: &str) -> String {
 
 fn sanitize_declarations(input: &str) -> String {
     let mut out = input.trim().to_string();
-    // collapse multiple semicolons
     while out.ends_with(";;") { out.pop(); }
-    // fix combined transform scale pattern '--transform-scale-x, --transform-scale-y: VALUE'
     if let Some(pos) = out.find("--transform-scale-x, --transform-scale-y:") {
-        // capture value after colon
         if let Some(val_start) = out[pos..].find(':') { let val_start_abs = pos + val_start + 1; if val_start_abs < out.len() {
             let value = out[val_start_abs..].split(';').next().unwrap_or("").trim();
             let replacement = format!("--transform-scale-x: {v}; --transform-scale-y: {v}", v=value);
-            // remove the original segment up to first semicolon
             if let Some(end_seg) = out[val_start_abs..].find(';') {
-                let end_abs = val_start_abs + end_seg + 1; // include semicolon
+                let end_abs = val_start_abs + end_seg + 1;
                 out.replace_range(pos..end_abs, &replacement);
             } else {
                 out.replace_range(pos..out.len(), &replacement);
@@ -654,4 +623,3 @@ fn sanitize_declarations(input: &str) -> String {
     }
     out
 }
-
