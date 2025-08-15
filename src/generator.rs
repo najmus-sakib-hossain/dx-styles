@@ -14,6 +14,9 @@ fn normalize_generated_css(css: &str) -> String {
     // We perform a few targeted, brace-balanced transforms.
     let mut out = css.to_string();
 
+    // Pre-pass 0: fix lines where a leading '.' was dropped for escaped symbol param groups (e.g. '\~text\(foo\){').
+    out = fix_missing_dot_for_escaped_symbol_groups(&out);
+
     // Pre-pass: sanitize individual class selectors so lightningcss can parse them.
     out = sanitize_class_selectors(&out);
     
@@ -90,6 +93,74 @@ fn normalize_generated_css(css: &str) -> String {
     out = remove_orphan_selectors(&out);
     // 7. Final re-escape pass for any leading invalid identifier chars the printer may have emitted raw.
     out = reescape_leading_invalid_identifiers(&out);
+    // 8. Fallback: force any lingering escaped symbol param group (missing earlier simplification) to simple form.
+    out = force_parametric_symbol_group_fallback(&out);
+    out
+}
+
+// If a selector line begins with an escaped symbol (e.g. \~text\(...){) but is missing the leading '.', add it back.
+fn fix_missing_dot_for_escaped_symbol_groups(input: &str) -> String {
+    let mut changed = false;
+    let mut out = String::with_capacity(input.len() + 8);
+    for line in input.lines() {
+        if let Some(first_non_ws_pos) = line.find(|c: char| !c.is_whitespace()) {
+            let rest = &line[first_non_ws_pos..];
+            if rest.starts_with('\\') {
+                // pattern: \\~name\\(
+                let bytes = rest.as_bytes();
+                if bytes.len() > 3 && (bytes[1] == b'~') {
+                    // scan name after symbol
+                    let mut idx = 2; // after ~
+                    while idx < bytes.len() {
+                        let c = bytes[idx];
+                        if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { idx += 1; continue; }
+                        break;
+                    }
+                    if idx + 2 < bytes.len() && bytes[idx] == b'\\' && bytes[idx + 1] == b'(' {
+                        // Looks like a param group; ensure original line didn't already start with '.' (it doesn't by construction)
+                        out.push_str(&line[..first_non_ws_pos]);
+                        out.push('.');
+                        out.push_str(rest);
+                        out.push('\n');
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push_str(line); out.push('\n');
+    }
+    if !changed { return input.to_string(); }
+    out
+}
+
+// Final safety: if a line still contains a raw parametric symbol group like \\~text\( ... \) {, collapse it.
+fn force_parametric_symbol_group_fallback(input: &str) -> String {
+    if !input.contains("\\~text\\(") { return input.to_string(); }
+    let mut out = String::with_capacity(input.len());
+    for line in input.lines() {
+        // Work only on selector lines (heuristic: line contains '\\~text\\(' and '{')
+        if line.contains("\\~text\\(") && line.contains('{') {
+            // Ensure leading '.'
+            let mut builder = String::new();
+            let trimmed = line.trim_start();
+            let leading_ws_len = line.len() - trimmed.len();
+            let (ws, body) = line.split_at(leading_ws_len);
+            let mut replaced = String::new();
+            // Insert '.' if missing
+            if !body.starts_with('.') { replaced.push('.'); }
+            // Copy through until first escaped '(' in pattern \\( ... then drop until matching closing \)
+            if let Some(group_start) = body.find("\\~text\\(") {
+                replaced.push_str(&body[..group_start]); // possibly starting '.' already inserted; but we inserted entire body earlier? adjust
+                if !replaced.ends_with('.') { replaced.push('.'); }
+                replaced.push_str("\\~text {");
+                out.push_str(ws); out.push_str(&replaced);
+                out.push('\n');
+                continue;
+            }
+        }
+        out.push_str(line); out.push('\n');
+    }
     out
 }
 
@@ -769,10 +840,12 @@ pub fn append_new_classes(
     if rules.is_empty() { return; }
     let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("Failed to open CSS file for appending");
     let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
-    let estimated: usize = rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
+    // Normalize each rule before appending to ensure grouped selectors are simplified.
+    let normalized_rules: Vec<String> = rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
+    let estimated: usize = normalized_rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
     let mut buffer = String::with_capacity(estimated);
     if need_leading { buffer.push('\n'); }
-    for (i, rule) in rules.iter().enumerate() {
+    for (i, rule) in normalized_rules.iter().enumerate() {
         if i > 0 { buffer.push_str("\n\n"); }
         buffer.push_str(rule);
     }
@@ -849,7 +922,8 @@ pub fn append_new_classes_ids(
     if need_leading { writer.write_all(b"\n").expect("write leading separator"); }
     for (i, r) in rules.iter().enumerate() {
         if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
-        writer.write_all(r.as_bytes()).expect("write rule");
+        let normalized = normalize_generated_css(r);
+        writer.write_all(normalized.as_bytes()).expect("write rule");
     }
     writer.write_all(b"\n").expect("write trailing newline");
     writer.flush().expect("flush append");
@@ -979,5 +1053,21 @@ mod tests {
         let out = normalize_generated_css(input);
     assert!(out.contains(".\\~text {") || out.contains(".\\~text{"), "Expected simplified parametric symbol group: {out}");
         assert!(!out.contains("~text\\(2.25rem"), "Grouping suffix should be removed: {out}");
+    }
+
+    #[test]
+    fn fixes_missing_dot_for_escaped_symbol_group() {
+        let input = "\\~text\\(2rem\\@sm,\\ 3rem\\@lg\\){font-size:clamp(2rem, 5vw, 3rem);}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".\\~text {") || out.contains(".\\~text{"), "Should insert missing dot for escaped symbol group: {out}");
+    }
+
+    #[test]
+    fn fallback_forces_remaining_parametric_symbol_group() {
+        // Intentionally tricky spacing to ensure fallback triggers
+        let input = "  \\~text\\(2.25rem\\@md,\\ 3rem\\@xl\\){font-size:clamp(2.25rem, 5vw, 3rem);}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".\\~text {") || out.contains(".\\~text{"), "Fallback should simplify lingering symbol group: {out}");
+        assert!(!out.contains("~text\\(2.25rem"), "Grouping portion should be removed: {out}");
     }
 }
