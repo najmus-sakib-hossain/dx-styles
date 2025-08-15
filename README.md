@@ -1,6 +1,84 @@
 # Dx
 Enhance Developer Experience
 
+```md
+1. Error: Incorrect Conditional/Container Query Generation
+What the Engine Did:
+
+CSS
+
+@container (width >= 640px) {
+  .bg-green-200, .text-green-900 { /* Incorrectly created a rule for the inner utilities */
+    background-color: oklch(...);
+    color: oklch(...);
+  }
+}
+What it Should Do (The Fix): The engine must generate one single rule inside the @container block, using the full, escaped group as the selector. It should not break down the utilities inside.
+
+CSS
+
+@container (width >= 640px) {
+  .\?\@container\>640px\(bg-green-200\ text-green-900\) {
+    background-color: oklch(...);
+    color: oklch(...);
+  }
+}
+2. Error: Incorrect Responsive Modifier (lg) Generation
+What the Engine Did: It generated a base style for .lg\(p-8\) outside the media query, applying styles it shouldn't have, and then correctly generated the media query block.
+
+What it Should Do (The Fix): A responsive group like lg(...) should only generate code inside its corresponding @media block. No base styles should be created.
+
+CSS
+
+/* This outside block should NOT be generated */
+.lg\(p-8\) { ... }
+
+/* This is correct and should be the ONLY output */
+@media (width >= 1024px) {
+  .lg\(p-8\) {
+    padding: 2rem;
+  }
+}
+3. Error: Conflicting Animation Rules
+What the Engine Did: It treated from(...) and to(...) as separate, conflicting animations, generating two different @keyframes rules and two different animation properties.
+
+What it Should Do (The Fix): The engine needs to recognize that from, to, and via groups on the same element belong to a single animation. It should find the animate:[duration] utility on that element and combine them.
+
+CSS
+
+/* Correct @keyframes block combining from and to */
+@keyframes dx-anim-782ee2f3ad223990 {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* The single animate utility that applies the final, combined animation */
+.animate\:1s {
+  animation: 1s both dx-anim-782ee2f3ad223990;
+}
+
+/* The from() and to() groups should NOT generate any animation properties themselves */
+4. Error: Incorrect transition() Group Handling
+What the Engine Did: It treated transition(500ms) as a standard component group and applied a set of unrelated base styles to it.
+
+What it Should Do (The Fix): The transition(...) group is a special meta-utility. It should generate a transition-property, transition-duration, and transition-timing-function rule. The engine should intelligently look at other state groups on the element (like hover(...)) to determine which properties to transition.
+
+CSS
+
+.transition\(500ms\) {
+  /* It should generate this: */
+  transition-property: /* color, background-color, transform, etc. */;
+  transition-duration: 500ms;
+  transition-timing-function: /* default ease */;
+}
+Summary of Fixes for Your Engine:
+Refactor Conditional Logic: Ensure that ?, @, and responsive groups like lg only generate CSS inside their respective at-rules.
+
+Implement Animation State Machine: The parser needs to treat from, to, and via as states of a single animation, triggered by the animate: utility.
+
+Create Special Handlers: Groups like transition() are not standard style containers. They are meta-utilities that require special handlers to generate their specific CSS properties.
+```
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential cmake git

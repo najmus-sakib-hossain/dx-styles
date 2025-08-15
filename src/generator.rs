@@ -51,6 +51,9 @@ fn normalize_generated_css(css: &str) -> String {
     // 3. Simplify local component groups ._name(...){ -> ._name { ... } (manual scan, no regex)
     out = simplify_local_component_groups(&out);
 
+    // 3b. Simplify known public group patterns .card\(tokens\){ -> .card { ... }
+    out = simplify_known_group_patterns(&out);
+
     // 4. Remove stray top-level conditional container group rules using existing structural scan.
     out = strip_top_level_container_rules(&out);
 
@@ -77,6 +80,8 @@ fn normalize_generated_css(css: &str) -> String {
 
     // 6. Remove orphan selector lines (e.g. stray `.dark` left after pruning its grouped block).
     out = remove_orphan_selectors(&out);
+    // 7. Final re-escape pass for any leading invalid identifier chars the printer may have emitted raw.
+    out = reescape_leading_invalid_identifiers(&out);
     out
 }
 
@@ -185,11 +190,13 @@ fn sanitize_class_selectors(input: &str) -> String {
     let mut last_written = 0usize;
     let mut out = String::with_capacity(input.len());
     while i < bytes.len() {
-        if bytes[i] == b'.' {
+    if bytes[i] == b'.' {
             let prev = if i == 0 { b'\n' } else { bytes[i.saturating_sub(1)] };
             // Delimiters that allow a class selector start. Exclude ':' so we don't match pseudo classes after element names
             // but allow cases like space, combinators, newline, '{', ','.
             if matches!(prev, b'\n' | b' ' | b'\t' | b'{' | b'}' | b',' | b'>' | b'+' | b'~') {
+        // Skip if next char starts a decimal number (e.g. .5rem, .25) to avoid escaping numeric literals inside declarations.
+        if i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() { i += 1; continue; }
                 let start = i + 1; // after '.'
                 let mut j = start;
                 // Read ident segment (stop at selector / group delimiters)
@@ -306,6 +313,103 @@ fn simplify_local_component_groups(input: &str) -> String {
     }
     if last_emitted == 0 { return input.to_string(); }
     if last_emitted < input.len() { out.push_str(&input[last_emitted..]); }
+    out
+}
+
+// Simplify whitelisted public group selectors like .card\(p-4\ m-2\){ -> .card { ... }
+fn simplify_known_group_patterns(input: &str) -> String {
+    // Whitelist of identifiers that if followed by an escaped grouping suffix should be simplified.
+    const NAMES: &[&str] = &["card", "transition", "mesh", "div", "from", "to", "text"]; // 'from'/'to' for potential custom grouping usage
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    let mut last_emitted = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'.' { // potential class selector
+            let ident_start = i + 1;
+            let mut ident_end = ident_start;
+            while ident_end < bytes.len() {
+                let c = bytes[ident_end];
+                if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_') { ident_end += 1; continue; }
+                break;
+            }
+            if ident_end > ident_start && ident_end + 1 < bytes.len() && bytes[ident_end] == b'\\' && bytes[ident_end + 1] == b'(' {
+                let name = &input[ident_start..ident_end];
+                if NAMES.iter().any(|n| *n == name) {
+                    // Scan ahead for closing \) prior to '{'
+                    let mut j = ident_end + 2; // after \(
+                    let mut closed = false;
+                    while j + 1 < bytes.len() {
+                        if bytes[j] == b'\\' {
+                            if j + 1 < bytes.len() && bytes[j + 1] == b')' { j += 2; closed = true; break; }
+                            j += 2; continue;
+                        }
+                        if bytes[j] == b'{' { break; }
+                        j += 1;
+                    }
+                    if closed {
+                        // Skip ws to '{'
+                        let mut k = j;
+                        while k < bytes.len() && matches!(bytes[k], b' ' | b'\t' | b'\n' | b'\r') { k += 1; }
+                        if k < bytes.len() && bytes[k] == b'{' {
+                            if i > last_emitted { out.push_str(&input[last_emitted..i]); }
+                            out.push_str(&input[i..ident_end]); // include '.' + name
+                            out.push_str(" {");
+                            i = k + 1; // advance past '{'
+                            last_emitted = i;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    if last_emitted == 0 { return input.to_string(); }
+    if last_emitted < input.len() { out.push_str(&input[last_emitted..]); }
+    out
+}
+
+// Re-escape any class selector whose first ident char would make the selector invalid if unescaped.
+// We target edge cases where the printer normalized escapes away (e.g., leading '*', '%', '~', '#', '+', '/', or digit).
+fn reescape_leading_invalid_identifiers(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut last_copy = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'.' {
+            let start = i + 1;
+            if start >= bytes.len() { break; }
+            // Skip decimal numeric literal like .5rem or .75% inside declarations
+            if bytes[start].is_ascii_digit() { i += 1; continue; }
+            // Peek at first char (could be escape already)
+            if bytes[start] == b'\\' { i += 1; continue; } // already escaped ident start
+            let ch = bytes[start] as char;
+            let needs_escape = match ch {
+                'a'..='z' | 'A'..='Z' | '_' => false,
+                '-' => { // '-digit' requires escape of digit; handle separately below
+                    if start + 1 < bytes.len() {
+                        let next = bytes[start + 1] as char;
+                        next.is_ascii_digit()
+                    } else { false }
+                }
+                _ => true,
+            } || ch.is_ascii_digit();
+            if needs_escape {
+                // emit prior content then escaped char
+                if i > last_copy { out.push_str(&input[last_copy..i+1]); } // include '.'
+                out.push('\\');
+                out.push(ch);
+                last_copy = start + 1;
+                i = start + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    if last_copy == 0 { return input.to_string(); }
+    if last_copy < input.len() { out.push_str(&input[last_copy..]); }
     out
 }
 
@@ -644,5 +748,39 @@ mod tests {
         let out = normalize_generated_css(input);
         assert!(!out.contains(".hover\\(bg-blue-600"), "Variant wrapper block should be removed even with newline before brace: {out}");
         assert!(out.contains(".ok"));
+    }
+
+    #[test]
+    fn reescapes_leading_invalid_identifier_chars() {
+        // Leading '*' should be escaped after normalization if printer emits it raw
+        let input = ".*loading(bg-gray-400){color:red;}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".\\*loading"), "Expected leading '*' to be escaped: {out}");
+    }
+
+    #[test]
+    fn simplifies_known_group_pattern() {
+        let input = ".card\\(p-4\\ m-2\\){color:red;}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".card {"), "Expected simplified .card selector: {out}");
+        assert!(!out.contains(".card\\(p-4"), "Grouped pattern suffix should be removed: {out}");
+    }
+
+    #[test]
+    fn reescapes_other_leading_invalid_chars() {
+    let input = ".%percent{width:10px;}\n.~tilde{color:red;}\n.+plus{color:blue;}";
+        let out = normalize_generated_css(input);
+    assert!(out.contains(".\\%percent"), "Expected % escape: {out}");
+    assert!(out.contains(".\\~tilde"), "Expected ~ escape: {out}");
+    assert!(out.contains(".\\+plus"), "Expected + escape: {out}");
+    }
+
+    #[test]
+    fn does_not_escape_decimal_literals() {
+        let input = ".opacity-75{opacity:.75;}\n.font-size{font-size:1.25rem;}";
+        let out = normalize_generated_css(input);
+    assert!(out.contains("opacity: .75") || out.contains("opacity:.75"), "Decimal literal .75 should remain (allow spacing): {out}");
+    assert!(out.contains("font-size: 1.25rem") || out.contains("font-size:1.25rem"), "Decimal 1.25rem should remain: {out}");
+    assert!(!out.contains("opacity:\\.75"), "Should not escape decimal point: {out}");
     }
 }
