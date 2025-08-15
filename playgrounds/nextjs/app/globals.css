@@ -1,13 +1,29 @@
-.p-4 {
-  padding: 1rem;
+.mt-2 {
+  margin-top: .5rem;
 }
 
-.font-bold {
+.dx-c-b85332e1 {
+  padding: 1rem;
+  border-radius: .5rem;
+  background-color: oklch(62.3% .214 259.815);
   font-weight: 700;
 }
 
-.text-4xl {
-  font-size: 2.25rem;
+.dx-c-b85332e1:hover {
+  background-color: oklch(54.6% .245 262.881);
+  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
+}
+
+.dx-c-b85332e1:focus {
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #93c5fd;
+}
+
+.dx-c-b85332e1[data-loading] {
+  background-color: oklch(70.7% .022 261.325);
+  animation: 2s cubic-bezier(.4, 0, .6, 1) infinite pulse;
+  cursor: wait;
 }
 
 .dx-c-ea87ae22 {
@@ -17,6 +33,10 @@
 
 .dark .dx-c-ea87ae22 {
   color: oklch(70.7% .022 261.325);
+}
+
+.text-4xl {
+  font-size: 2.25rem;
 }
 
 .dx-c-6b72624c {
@@ -56,12 +76,37 @@
   animation: 1s both dxk-532359f379703136;
 }
 
+.w-full {
+  width: 100%;
+}
+
 .container-type-inline-size {
   container-type: inline-size;
 }
 
-.w-full {
-  width: 100%;
+.dx-c-21121286 {
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #8b5cf6;
+}
+
+.dx-c-791abefe {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+@container (width >= 640px) {
+  .dx-c-791abefe {
+    font-size: 1.25rem;
+  }
+}
+
+.dx-c-27734a5f {
+  padding: 2rem;
+  backdrop-filter: blur(16px);
+  border-radius: .75rem;
+  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
+  margin-top: 2rem;
 }
 
 .dx-c-c7d60622 {
@@ -79,63 +124,16 @@
   margin-top: .5rem;
 }
 
+.font-bold {
+  font-weight: 700;
+}
+
 .font-semibold {
   font-weight: 600;
 }
 
-.dx-c-791abefe {
-  font-weight: 700;
-  font-size: 1.125rem;
-}
-
-@container (width >= 640px) {
-  .dx-c-791abefe {
-    font-size: 1.25rem;
-  }
-}
-
-.dx-c-dd4c87ba {
-  padding: 1.5rem;
-  border-radius: .5rem;
-  background-color: oklch(94.5% .129 101.54);
-  color: oklch(42.1% .095 57.708);
-}
-
-@container (width >= 640px) {
-  .dx-c-dd4c87ba {
-    background-color: oklch(92.5% .084 155.995);
-    color: oklch(39.3% .095 152.535);
-  }
-}
-
-@media (width >= 768px) {
-  .md\:text-5xl {
-    font-size: 3rem;
-  }
-}
-
-.dx-c-b85332e1 {
-  padding: 1rem;
-  border-radius: .5rem;
-  background-color: oklch(62.3% .214 259.815);
-  font-weight: 700;
-}
-
-.dx-c-b85332e1:hover {
-  background-color: oklch(54.6% .245 262.881);
-  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
-}
-
-.dx-c-b85332e1:focus {
-  outline: 2px solid #0000;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px #93c5fd;
-}
-
-.dx-c-b85332e1[data-loading] {
-  background-color: oklch(70.7% .022 261.325);
-  animation: 2s cubic-bezier(.4, 0, .6, 1) infinite pulse;
-  cursor: wait;
+.dx-c-6784c268 > div {
+  margin-top: 1rem;
 }
 
 .dx-c-f4b7f9c9 {
@@ -149,36 +147,12 @@
   box-shadow: 0 0 0 2px #8b5cf6;
 }
 
-.overflow-auto {
-  overflow: auto;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
 .max-w-5xl {
   max-width: 64rem;
 }
 
-.resize-x {
-  resize: horizontal;
-}
-
-.mb-4 {
-  margin-bottom: 1rem;
-}
-
-.text-2xl {
-  font-size: 1.5rem;
-}
-
-.dx-c-6784c268 > div {
-  margin-top: 1rem;
-}
-
-.border-dashed {
-  border-style: dashed;
+.max-w-full {
+  max-width: 100%;
 }
 
 .dx-c-2bed0f40 {
@@ -194,20 +168,51 @@
   --transform-scale-y: 1.1;
 }
 
-.dx-c-21121286 {
-  outline: 2px solid #0000;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px #8b5cf6;
+.overflow-auto {
+  overflow: auto;
 }
 
-.mt-2 {
-  margin-top: .5rem;
+.border-dashed {
+  border-style: dashed;
 }
 
-.dx-c-27734a5f {
-  padding: 2rem;
-  backdrop-filter: blur(16px);
-  border-radius: .75rem;
-  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
-  margin-top: 2rem;
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+@media (width >= 768px) {
+  .md\:text-5xl {
+    font-size: 3rem;
+  }
+}
+
+.resize-x {
+  resize: horizontal;
+}
+
+.dx-c-d48a381b {
+  padding: 1.5rem;
+  border-radius: .5rem;
+  background-color: oklch(88.2% .059 254.128);
+  color: oklch(37.9% .146 265.522);
+}
+
+@container (width >= 640px) {
+  .dx-c-d48a381b {
+    background-color: oklch(92.5% .084 155.995);
+    color: oklch(39.3% .095 152.535);
+  }
+}
+
+.dx-c-d48a381b:has( > :nth-child(2)) {
+  background-color: oklch(94.5% .129 101.54);
+  color: oklch(42.1% .095 57.708);
 }

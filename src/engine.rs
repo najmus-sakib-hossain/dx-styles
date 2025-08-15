@@ -550,6 +550,13 @@ impl StyleEngine {
                     out.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", val, build_block(selector, decls)));
                 }
                 else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) { out.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", v, build_block(selector, decls))); } }
+                else if let Some(rest) = cond.strip_prefix("self:child-count>") {
+                    // Translate to :has pseudo with nth-child threshold (approximation)
+                    if let Ok(threshold) = rest.parse::<usize>() {
+                        let hashed = format!("{}:has(> :nth-child({}))", selector, threshold);
+                        out.push_str(&build_block(&hashed, decls)); out.push('\n');
+                    }
+                }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
                 let spec = rest; let parts: Vec<&str> = spec.split('|').collect();
                 if parts.len() >= 3 && parts[0] == "animstage" { let anim_name = format!("dxk-{:x}", seahash::hash(selector.as_bytes())); let stage = parts[1].to_string(); let toks = parts[2].to_string(); anim_stage_map.entry(anim_name).or_default().push((stage, toks)); }

@@ -165,9 +165,17 @@ impl ClassNameVisitor {
                     let attr_name = ident.trim_start_matches('*').to_string();
                     if let Some(c) = &mut pending { c.data_attr_rules.push((attr_name, inner_tokens)); }
                 } else if ident.starts_with('?') {
-                    // Conditional query DSL e.g. ?@container>640px(...)
+                    // Conditional query DSL e.g. ?@container>640px(...) or ?@self:child-count>2(_highlight)
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.conditional_blocks.push((ident[1..].to_string(), inner_tokens)); }
+                    if let Some(c) = &mut pending {
+                        let cond = &ident[1..];
+                        if let Some(rest) = cond.strip_prefix("@self:") {
+                            // store as special self-conditional block
+                            c.conditional_blocks.push((format!("self:{}", rest), inner_tokens));
+                        } else {
+                            c.conditional_blocks.push((cond.to_string(), inner_tokens));
+                        }
+                    }
                 } else if ident.starts_with('~') {
                     // Fluid scaling ~prop(min@bp, max@bp)
                     ensure(&mut pending);
@@ -206,11 +214,10 @@ impl ClassNameVisitor {
                         out.push(composite_class);
                     }
                 } else if ident.starts_with('_') {
-                    // Scoped (local) component definition
+                    // Scoped (local) component definition (store only, don't apply immediately)
                     let cname = ident.trim_start_matches('_');
                     local_components.entry(cname.to_string()).or_insert(inner_tokens.clone());
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.base.extend(inner_tokens.clone()); }
                 } else if ident == "from" || ident == "to" || ident == "via" {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
@@ -235,15 +242,11 @@ impl ClassNameVisitor {
             } else {
                 // plain token
                 if ident.starts_with('_') {
-                    // scoped component definition like _highlight(a b)
-                    if !self.components.contains_key(ident) { /* do not persist globally */ }
+                    // reference scoped component definition like _highlight
                     ensure(&mut pending);
                     let cname = ident.trim_start_matches('_');
-                    if let Some(local) = local_components.get(cname) {
-                        if let Some(c) = &mut pending { c.base.extend(local.clone()); }
-                    } else if let Some(global) = self.components.get(cname) {
-                        if let Some(c) = &mut pending { c.base.extend(global.clone()); }
-                    } else if let Some(c) = &mut pending { c.base.push(ident.to_string()); }
+                    if let Some(local) = local_components.get(cname) { if let Some(c) = &mut pending { c.base.extend(local.clone()); } }
+                    else if let Some(global) = self.components.get(cname) { if let Some(c)= &mut pending { c.base.extend(global.clone()); } }
                 } else if ident == "forwards" {
                     ensure(&mut pending); if let Some(c)= &mut pending { c.base.push("animfill:forwards".to_string()); }
                 } else if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
@@ -258,6 +261,9 @@ impl ClassNameVisitor {
                     if let Some(name) = t.strip_prefix('$') {
                         if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
                         if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                    } else if let Some(name) = t.strip_prefix('_') {
+                        if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                        if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
                     }
                     expanded.push(t.clone());
                 }
