@@ -2,7 +2,7 @@ export default function Home() {
   return (
     <main
       className="
-        min-h-screen w-screen p-4 text-gray-800
+        bg-red-500 min-h-screen w-screen p-4 text-gray-800
         lg(p-8)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)

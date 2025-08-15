@@ -1,13 +1,25 @@
-.font-bold {
-  font-weight: 700;
+.max-w-5xl {
+  max-width: 64rem;
 }
 
-.text-2xl {
-  font-size: 1.5rem;
-}
-
-.dx-class-6784c268>div {
+.dx-class-6784c268 > div {
   margin-top: 1rem;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.mt-2 {
+  margin-top: .5rem;
+}
+
+.max-w-full {
+  max-width: 100%;
 }
 
 .dx-class-ea87ae22 {
@@ -19,12 +31,14 @@
   color: oklch(70.7% .022 261.325);
 }
 
-.max-w-full {
-  max-width: 100%;
+.mb-4 {
+  margin-bottom: 1rem;
 }
 
-.max-w-5xl {
-  max-width: 64rem;
+.dx-class-21121286 {
+  outline: 2px solid #0000;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #8b5cf6;
 }
 
 .dx-class-d48a381b {
@@ -34,14 +48,14 @@
   color: oklch(37.9% .146 265.522);
 }
 
-@container (width >=640px) {
+@container (width >= 640px) {
   .dx-class-d48a381b {
     background-color: oklch(92.5% .084 155.995);
     color: oklch(39.3% .095 152.535);
   }
 }
 
-.dx-class-d48a381b:has(> :nth-last-child(n+2):first-child) {
+.dx-class-d48a381b:has( > :nth-last-child(n+2):first-child) {
   background-color: oklch(94.5% .129 101.54);
   color: oklch(42.1% .095 57.708);
 }
@@ -52,6 +66,37 @@
   border-radius: .75rem;
   box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
   margin-top: 2rem;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.dx-class-791abefe {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+@container (width >= 640px) {
+  .dx-class-791abefe {
+    font-size: 1.25rem;
+  }
 }
 
 .dx-class-f4b7f9c9 {
@@ -65,37 +110,6 @@
   box-shadow: 0 0 0 2px #8b5cf6;
 }
 
-.w-full {
-  width: 100%;
-}
-
-.mb-4 {
-  margin-bottom: 1rem;
-}
-
-.resize-x {
-  resize: horizontal;
-}
-
-.overflow-auto {
-  overflow: auto;
-}
-
-.dx-class-791abefe {
-  font-weight: 700;
-  font-size: 1.125rem;
-}
-
-@container (width >=640px) {
-  .dx-class-791abefe {
-    font-size: 1.25rem;
-  }
-}
-
-.dx-class-b5635c9e {
-  font-size: clamp(2.25rem, 2.25rem + .146484vw - 1.125px, 3rem);
-}
-
 .dx-class-2bed0f40 {
   padding: 1.5rem;
   background-color: oklch(62.7% .265 303.9);
@@ -107,6 +121,33 @@
 .dx-class-2bed0f40:hover {
   --transform-scale-x: 1.1;
   --transform-scale-y: 1.1;
+}
+
+.dx-class-b5635c9e {
+  font-size: clamp(2.25rem, 2.25rem + .146484vw - 1.125px, 3rem);
+}
+
+.dx-class-c7d60622 {
+  padding: 2rem;
+  backdrop-filter: blur(16px);
+  border-radius: .75rem;
+  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
+}
+
+.dx-class-c7d60622 > h1 {
+  font-weight: 700;
+}
+
+.dx-class-c7d60622 > p {
+  margin-top: .5rem;
+}
+
+.border-dashed {
+  border-style: dashed;
+}
+
+.resize-x {
+  resize: horizontal;
 }
 
 .dx-class-b85332e1 {
@@ -133,11 +174,8 @@
   cursor: wait;
 }
 
-.border-dashed {
-  border-style: dashed;
-}
-
-.dx-class-6b72624c {
+.dx-class-7ef7217c {
+  background-color: oklch(63.7% .237 25.331);
   min-height: 100vh;
   width: 100vw;
   padding: 1rem;
@@ -150,17 +188,17 @@
   animation-delay: 0s;
 }
 
-.dark .dx-class-6b72624c {
+.dark .dx-class-7ef7217c {
   color: oklch(92.8% .006 264.531);
 }
 
-@media (width >=1024px) {
-  .dx-class-6b72624c {
+@media (width >= 1024px) {
+  .dx-class-7ef7217c {
     padding: 2rem;
   }
 }
 
-@keyframes dx-keyframe-a5a64beb4cb0d47 {
+@keyframes dx-keyframe-d315427153a08a18 {
   0% {
     opacity: 0;
   }
@@ -170,43 +208,6 @@
   }
 }
 
-.dx-class-6b72624c {
-  animation: 1s both dx-keyframe-a5a64beb4cb0d47;
-}
-
-.font-semibold {
-  font-weight: 600;
-}
-
-.mt-2 {
-  margin-top: .5rem;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.dx-class-c7d60622 {
-  padding: 2rem;
-  backdrop-filter: blur(16px);
-  border-radius: .75rem;
-  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -2px #0000000d;
-}
-
-.dx-class-c7d60622>h1 {
-  font-weight: 700;
-}
-
-.dx-class-c7d60622>p {
-  margin-top: .5rem;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.dx-class-21121286 {
-  outline: 2px solid #0000;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px #8b5cf6;
+.dx-class-7ef7217c {
+  animation: 1s both dx-keyframe-d315427153a08a18;
 }
