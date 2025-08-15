@@ -221,8 +221,21 @@ impl StyleEngine {
             css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(class_name.len() + pseudo_classes.len() + 1);
             selector.push('.');
+            // Minimal escaping: only escape ':' and '@' if not already escaped in source to avoid double escaping downstream.
+            let mut prev_was_backslash = false;
             for ch in class_name.chars() {
-                match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
+                match ch {
+                    ':' => {
+                        if !prev_was_backslash { selector.push_str("\\:"); } else { selector.push(':'); }
+                        prev_was_backslash = false;
+                    }
+                    '@' => {
+                        if !prev_was_backslash { selector.push_str("\\@"); } else { selector.push('@'); }
+                        prev_was_backslash = false;
+                    }
+                    '\\' => { selector.push('\\'); prev_was_backslash = !prev_was_backslash; }
+                    _ => { selector.push(ch); prev_was_backslash = false; }
+                }
             }
             selector.push_str(&pseudo_classes);
             let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
@@ -277,7 +290,20 @@ impl StyleEngine {
             css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
             selector.push('.');
-            for ch in escaped.chars() { match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) } }
+            // Treat provided 'escaped' as mostly sanitized; only ensure single escaping for ':' and '@'.
+            let mut prev_src_char: Option<char> = None;
+            for ch in escaped.chars() {
+                match ch {
+                    ':' => {
+                        if prev_src_char != Some('\\') { selector.push_str("\\:"); } else { selector.push(':'); }
+                    }
+                    '@' => {
+                        if prev_src_char != Some('\\') { selector.push_str("\\@"); } else { selector.push('@'); }
+                    }
+                    _ => selector.push(ch)
+                }
+                prev_src_char = Some(ch);
+            }
             selector.push_str(&pseudo_classes);
             let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
             self.wrap_media_queries(blocks, &media_queries)

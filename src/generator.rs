@@ -58,6 +58,15 @@ fn normalize_generated_css(css: &str) -> String {
     // like .?@container>640px(bg-green-200\ text-green-900) -> .bg-green-200, .text-green-900
     out = expand_container_group_selectors(&out);
 
+    // 4c. After expansion, remove any leftover synthetic container grouping selectors that failed to expand (safety cleanup)
+    out = remove_selector_blocks(&out, |sel| {
+        // Unescape one layer for matching
+        let mut de = String::with_capacity(sel.len());
+        let mut it = sel.chars().peekable();
+        while let Some(c) = it.next() { if c == '\\' { if let Some(n) = it.next() { de.push(n); } } else { de.push(c); } }
+        de.starts_with(".?@container>")
+    });
+
     // 5. Final sanity: attempt parse / re-print; if it fails, continue with current string.
     // Use a cloned copy to avoid borrow issues when replacing `out`.
     if let Ok(parsed) = lightningcss::stylesheet::StyleSheet::parse(&out.clone(), lightningcss::stylesheet::ParserOptions::default()) {
@@ -362,6 +371,7 @@ fn remove_orphan_selectors(input: &str) -> String {
     for line in input.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('.') && !trimmed.contains('{') && !trimmed.is_empty() {
+            // Skip synthetic container artifact lines e.g. .\?\\\@container>
             // Skip orphan selector line
             continue;
         }
