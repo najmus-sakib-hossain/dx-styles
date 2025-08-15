@@ -219,8 +219,11 @@ impl StyleEngine {
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
             css = sanitize_declarations(&css);
-            let mut selector = String::from(".");
-            for ch in class_name.chars() { match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) } }
+            let mut selector = String::with_capacity(class_name.len() + pseudo_classes.len() + 1);
+            selector.push('.');
+            for ch in class_name.chars() {
+                match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) }
+            }
             selector.push_str(&pseudo_classes);
             let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
             self.wrap_media_queries(blocks, &media_queries)
@@ -273,7 +276,9 @@ impl StyleEngine {
         core_css_raw.map(|mut css| {
             css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
-            selector.push('.'); selector.push_str(escaped); selector.push_str(&pseudo_classes);
+            selector.push('.');
+            for ch in escaped.chars() { match ch { ':' => selector.push_str("\\:"), '@' => selector.push_str("\\@"), _ => selector.push(ch) } }
+            selector.push_str(&pseudo_classes);
             let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
             self.wrap_media_queries(blocks, &media_queries)
         })

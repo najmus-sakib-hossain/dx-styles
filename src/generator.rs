@@ -27,9 +27,25 @@ fn normalize_generated_css(css: &str) -> String {
         ".peer-hover\\(", ".peer-focus\\(", ".peer-active\\(", ".dark\\("
     ];
     out = remove_selector_blocks(&out, |sel| {
-        // Only match if selector is single (no spaces) and exactly one of the variants.
-        if sel.contains(' ') { return false; }
-        VARIANTS.iter().any(|v| sel.starts_with(v))
+        // Normalize selector by collapsing internal whitespace sequences to single spaces to ensure newline before brace doesn't block detection.
+        let mut simple = String::with_capacity(sel.len());
+        let mut last_ws = false;
+        for ch in sel.chars() {
+            if ch.is_whitespace() { if !last_ws { simple.push(' '); last_ws = true; } } else { simple.push(ch); last_ws = false; }
+        }
+        let mut trimmed = simple.trim();
+        // If selector ends with an escaped grouping suffix like \\) strip everything from first \\(
+        if let Some(idx) = trimmed.find("\\(") {
+            trimmed = &trimmed[..idx];
+        }
+        if trimmed.contains(' ') { return false; }
+        // Accept either the escaped variant prefix (list above) or its base name without the escaped group.
+        VARIANTS.iter().any(|v| {
+            if trimmed == *v || trimmed.starts_with(v) { return true; }
+            // Derive base variant (strip trailing '\(' sequence)
+            if let Some(base) = v.strip_suffix("\\(") { trimmed == base }
+            else { false }
+        })
     });
 
     // 3. Simplify local component groups ._name(...){ -> ._name { ... } (manual scan, no regex)
@@ -292,31 +308,46 @@ fn remove_selector_blocks<F: Fn(&str) -> bool>(input: &str, predicate: F) -> Str
     let mut out = String::with_capacity(input.len());
     while i < bytes.len() {
         if bytes[i] == b'.' { // potential class selector start
-            let sel_start = i;
-            // Read until '{' or newline / comma (we keep simple selectors only)
-            while i < bytes.len() && bytes[i] != b'{' && bytes[i] != b'\n' { i += 1; }
-            if i < bytes.len() && bytes[i] == b'{' {
-                let selector = &input[sel_start..i].trim();
+            let sel_start = i; // remember where selector started
+            let mut j = i;
+            // Move j until we hit '{' or a hard terminator for selector.
+            while j < bytes.len() && bytes[j] != b'{' && bytes[j] != b'\n' { j += 1; }
+            let mut brace_pos: Option<usize> = None;
+            let mut selector_end = j; // end of selector slice (exclusive) ignoring trailing ws
+            if j < bytes.len() && bytes[j] == b'{' { brace_pos = Some(j); }
+            else if j < bytes.len() && bytes[j] == b'\n' {
+                // Look ahead for '{' across whitespace/newlines
+                let mut k = j + 1;
+                while k < bytes.len() {
+                    if bytes[k] == b'{' { brace_pos = Some(k); selector_end = j; break; }
+                    if !bytes[k].is_ascii_whitespace() { break; }
+                    k += 1;
+                }
+            }
+            if let Some(bpos) = brace_pos {
+                // selector span from sel_start to selector_end (exclude trailing whitespace/newlines before brace)
+                let mut selector = &input[sel_start..selector_end];
+                // Trim trailing whitespace
+                while selector.ends_with(|c: char| c.is_whitespace()) { selector = selector.trim_end(); }
+                // If selector contains an escaped group e.g. .hover\(foo\ bar\) truncate at first \(
+                if let Some(group_idx) = selector.find("\\(") { selector = &selector[..group_idx]; }
+                let selector = selector.trim_end();
                 if predicate(selector) {
-                    // Skip balanced block
+                    // Skip balanced block beginning at bpos
+                    i = bpos; // position at '{'
                     let mut depth = 0usize;
                     while i < bytes.len() {
                         if bytes[i] == b'{' { depth += 1; }
-                        else if bytes[i] == b'}' {
-                            depth -= 1; if depth == 0 { i += 1; break; }
-                        }
+                        else if bytes[i] == b'}' { depth -= 1; if depth == 0 { i += 1; break; } }
                         i += 1;
                     }
-                    // Skip trailing whitespace / newlines
                     while i < bytes.len() && (bytes[i] == b'\n' || bytes[i].is_ascii_whitespace()) { i += 1; }
-                    continue; // don't copy removed block
+                    continue; // removed block
                 }
-                // Not removed: copy selector + '{' and continue streaming rest by rewinding to sel_start logic
-                // To keep code simple, fall through to generic copy below by resetting i to sel_start.
-                i = sel_start; // reset for normal copy path
+                // Not removed: reset i to sel_start so normal copy proceeds char by char
+                i = sel_start;
             } else {
-                // newline or EOF, not a block; just fall through
-                i = sel_start; // reset for normal copy path
+                i = sel_start; // no brace found; fall through
             }
         }
         out.push(bytes[i] as char);
@@ -594,5 +625,14 @@ mod tests {
         let out = normalize_generated_css(input);
         assert!(out.contains("._highlight {"), "Expected simplified selector, got: {out}");
         assert!(!out.contains("_highlight\\(bg"), "Grouping suffix should be removed: {out}");
+    }
+
+    #[test]
+    fn removes_variant_block_with_newline_before_brace() {
+        // Selector line break before opening brace should still be pruned
+        let input = ".hover\\(bg-blue-600\\ shadow-lg\\)\n{color:red;}\n.ok{a:b;}";
+        let out = normalize_generated_css(input);
+        assert!(!out.contains(".hover\\(bg-blue-600"), "Variant wrapper block should be removed even with newline before brace: {out}");
+        assert!(out.contains(".ok"));
     }
 }
