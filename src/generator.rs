@@ -54,6 +54,10 @@ fn normalize_generated_css(css: &str) -> String {
     // 3b. Simplify known public group patterns .card\(tokens\){ -> .card { ... }
     out = simplify_known_group_patterns(&out);
 
+    // 3c. Simplify grouped parent selectors used only as a wrapper in child selectors:
+    // e.g. .div\(h1\(font-bold\)\ p\(mt-2\)\) > h1 { ... } -> .div > h1 { ... }
+    out = simplify_group_parents_in_complex_selectors(&out);
+
     // 4. Remove stray top-level conditional container group rules using existing structural scan.
     out = strip_top_level_container_rules(&out);
 
@@ -368,6 +372,106 @@ fn simplify_known_group_patterns(input: &str) -> String {
     if last_emitted == 0 { return input.to_string(); }
     if last_emitted < input.len() { out.push_str(&input[last_emitted..]); }
     out
+}
+
+// Collapse parent grouping like .div\(h1\(font-bold\)\ p\(mt-2\)\) > h1 into .div > h1 while preserving the rest.
+fn simplify_group_parents_in_complex_selectors(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    let mut last_emit = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'.' { // candidate start
+            let name_start = i + 1;
+            let mut name_end = name_start;
+            // Allow escapes in name (like \*loading) but stop at first grouping or delimiter
+            while name_end < bytes.len() {
+                let c = bytes[name_end];
+                if c == b'\\' {
+                    if name_end + 1 >= bytes.len() { break; }
+                    let next = bytes[name_end + 1];
+                    // If next is '(' we reached grouping start; do not consume
+                    if next == b'(' { break; }
+                    // Otherwise treat escaped char as part of name
+                    name_end += 2; continue;
+                }
+                if matches!(c, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'*') { name_end += 1; continue; }
+                break;
+            }
+            // Expect escaped '(' starting a grouping right after name
+            if name_end + 1 < bytes.len() && bytes[name_end] == b'\\' && bytes[name_end + 1] == b'(' {
+                // Scan balanced escaped parens depth-aware
+                let mut depth = 0i32;
+                let mut j = name_end;
+                let mut valid = false;
+                while j + 1 < bytes.len() {
+                    if bytes[j] == b'\\' {
+                        let next = bytes[j+1];
+                        if next == b'(' { depth += 1; j += 2; continue; }
+                        if next == b')' { depth -= 1; j += 2; if depth == 0 { valid = true; break; } continue; }
+                        j += 2; continue;
+                    }
+                    if matches!(bytes[j], b'{' | b'\n') { break; } // abort - not a pure grouping before block/combinator
+                    j += 1;
+                }
+                if valid {
+                    let group_end = j; // j positioned after processing closing \")" (points to index after the backslash? ensure adjustment)
+                    // Move group_end forward past the final escaped ) if not already
+                    let mut group_after = group_end;
+                    // Skip any whitespace after group
+                    while group_after < bytes.len() && bytes[group_after].is_ascii_whitespace() { group_after += 1; }
+                    // Peek ahead after any whitespace
+                    let mut k = group_after;
+                    if k < bytes.len() {
+                        let next = bytes[k];
+                        // Only collapse when followed by combinator/attribute/child context, NOT '{' (block handled earlier)
+                        if matches!(next, b'>' | b'+' | b'~' | b'[') || next.is_ascii_alphanumeric() || next == b'.' || next == b'#' {
+                            // Emit preceding slice, then simplified .<name>
+                            if i > last_emit { out.push_str(&input[last_emit..i]); }
+                            out.push_str(&input[i..name_end]); // includes '.' prefix and full name (with escapes)
+                            last_emit = group_after; // we drop the grouping tokens
+                            i = group_after; // continue scanning from after group
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    if last_emit == 0 { return input.to_string(); }
+    if last_emit < input.len() { out.push_str(&input[last_emit..]); }
+    // Secondary coarse pass: collapse any residual .ident\( ... \) > pattern not handled (no nested braces inside)
+    let mut coarse = String::with_capacity(out.len());
+    let mut idx = 0usize;
+    let ob = out.as_bytes();
+    while idx < ob.len() {
+        if ob[idx] == b'.' {
+            let start = idx;
+            let mut k = idx + 1;
+            while k < ob.len() && (ob[k].is_ascii_alphanumeric() || matches!(ob[k], b'-' | b'_' | b'*' | b'\\')) {
+                if ob[k] == b'\\' && k + 1 < ob.len() && ob[k+1] == b'(' { break; }
+                k += 1;
+            }
+            if k + 1 < ob.len() && ob[k] == b'\\' && ob[k+1] == b'(' {
+                // Find \") >" sequence
+                if let Some(rel) = out[k..].find("\\) >") {
+                    let close_idx = k + rel; // position of '\' before ')'
+                    // Confirm there's no '{' between k and close_idx
+                    if !out[k..close_idx].contains('{') {
+                        // Emit prefix
+                        coarse.push_str(&out[idx..k]);
+                        coarse.push_str(" >");
+                        idx = close_idx + 3; // skip '\) >'
+                        continue;
+                    }
+                }
+            }
+        }
+        coarse.push(ob[idx] as char);
+        idx += 1;
+    }
+    coarse
 }
 
 // Re-escape any class selector whose first ident char would make the selector invalid if unescaped.
@@ -782,5 +886,22 @@ mod tests {
     assert!(out.contains("opacity: .75") || out.contains("opacity:.75"), "Decimal literal .75 should remain (allow spacing): {out}");
     assert!(out.contains("font-size: 1.25rem") || out.contains("font-size:1.25rem"), "Decimal 1.25rem should remain: {out}");
     assert!(!out.contains("opacity:\\.75"), "Should not escape decimal point: {out}");
+    }
+
+    #[test]
+    fn simplifies_group_parent_in_child_selector() {
+        let input = ".div\\(div\\(mt-4\\)\\) > div{margin-top:1rem;}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".div > div"), "Expected collapsed parent group: {out}");
+        assert!(!out.contains("div\\(mt-4"), "Grouping tokens should be removed: {out}");
+    }
+
+    #[test]
+    fn simplifies_group_parent_with_multiple_children() {
+        let input = ".div\\(h1\\(font-bold\\)\\ p\\(mt-2\\)\\) > h1{font-weight:700;} .div\\(h1\\(font-bold\\)\\ p\\(mt-2\\)\\) > p{margin-top:.5rem;}";
+        let out = normalize_generated_css(input);
+        assert!(out.contains(".div > h1"), "h1 selector collapsed: {out}");
+        assert!(out.contains(".div > p"), "p selector collapsed: {out}");
+        assert!(!out.contains("p\\(mt-2"), "Inner grouping removed: {out}");
     }
 }
