@@ -7,7 +7,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Mutex, RwLock};
 use std::sync::Arc;
 use cssparser::serialize_identifier;
-use std::fmt; // for serialize_identifier target impl
+use std::fmt;
 
 mod styles_generated {
     #![allow(
@@ -39,7 +39,7 @@ pub struct StyleEngine {
     states: HashMap<String, String>,
     container_queries: HashMap<String, String>,
     colors: HashMap<String, String>,
-    animation_templates: HashMap<String, String>,
+    _animation_templates: HashMap<String, String>,
     css_cache: Mutex<LruCache<u32, Arc<String>>>,
     precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
@@ -116,7 +116,7 @@ impl StyleEngine {
                 .collect()
         });
 
-        let animation_templates = config.animation_generators().map_or_else(HashMap::new, |a| {
+        let _animation_templates = config.animation_generators().map_or_else(HashMap::new, |a| {
             a.iter()
                 .map(|ag| (ag.name().to_string(), ag.template().to_string()))
                 .collect()
@@ -129,7 +129,7 @@ impl StyleEngine {
             states,
             container_queries,
             colors,
-            animation_templates,
+            _animation_templates,
             css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
             precomputed: RwLock::new(None),
         })
@@ -192,7 +192,6 @@ impl StyleEngine {
     }
 
     fn compute_css(&self, class_name: &str) -> Option<String> {
-        // Skip standalone animation stage utility classes (from(...), to(...), via(...)) so they don't emit empty rules.
         if class_name.starts_with("from(") || class_name.starts_with("to(") || class_name.starts_with("via(") {
             return None;
         }
@@ -227,21 +226,18 @@ impl StyleEngine {
         }
 
         let core_css_raw = self
-            .expand_composite(class_name) // full composite name (may contain spaces for animate chain)
+            .expand_composite(class_name)
             .or_else(|| self.precompiled.get(base_class).cloned())
             .or_else(|| self.generate_color_css(base_class))
-            // Only treat as simple animate utility if not a composite grouping containing stages
             .or_else(|| if class_name.contains(' ') { None } else { self.generate_animation_css(class_name) })
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
             css = sanitize_declarations(&css);
-            // Build escaped selector using cssparser just like interner.
             let mut escaped_ident = String::with_capacity(class_name.len() + 8);
             struct Acc<'a> { buf: &'a mut String }
             impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s:&str)->fmt::Result { self.buf.push_str(s); Ok(()) } }
             if serialize_identifier(class_name, &mut Acc { buf: &mut escaped_ident }).is_err() {
-                // Fallback: minimal legacy escaping
                 for ch in class_name.chars() {
                     match ch { ':'=>escaped_ident.push_str("\\:"), '@'=>escaped_ident.push_str("\\@"), '('=>escaped_ident.push_str("\\("), ')'=>escaped_ident.push_str("\\)"), ' '=>escaped_ident.push_str("\\ "), '/' => escaped_ident.push_str("\\/"), '\\'=>escaped_ident.push_str("\\\\"), _=>escaped_ident.push(ch) }
                 }
@@ -264,8 +260,6 @@ impl StyleEngine {
 
     fn compute_css_from_raw_and_escaped(&self, class_name: &str, escaped: &str) -> Option<String> {
     if class_name.starts_with("from(") || class_name.starts_with("to(") || class_name.starts_with("via(") { return None; }
-        // Container grouping syntax: ?@container>SIZE(utilA utilB ...)
-        // Required behavior: single rule inside @container with the FULL escaped grouping selector.
         if class_name.starts_with("?@container>") && class_name.contains('(') && class_name.ends_with(')') {
             if let Some(block) = self.generate_container_group(class_name, escaped) { return Some(block); }
         }
@@ -307,7 +301,6 @@ impl StyleEngine {
             css = sanitize_declarations(&css);
             let mut selector = String::with_capacity(escaped.len() + pseudo_classes.len() + 1);
             selector.push('.');
-            // Treat provided 'escaped' as mostly sanitized; only ensure single escaping for ':' and '@'.
             let mut prev_src_char: Option<char> = None;
             for ch in escaped.chars() {
                 match ch {
@@ -327,12 +320,6 @@ impl StyleEngine {
         })
     }
 
-    // Build aggregated container query block for grouping classes of the form:
-    // ?@container>640px(bg-green-200 text-green-900)
-    // Output:
-    // @container (min-width: 640px) {
-    //   .\?\@container\>640px\(bg-green-200\ text-green-900\) { <merged decls> }
-    // }
     fn generate_container_group(&self, raw: &str, escaped_selector: &str) -> Option<String> {
         const PREFIX: &str = "?@container>";
         let after_prefix = &raw[PREFIX.len()..];
@@ -340,24 +327,20 @@ impl StyleEngine {
         let size_part = after_prefix[..paren_idx].trim();
         if size_part.is_empty() { return None; }
         let inner_raw = after_prefix[paren_idx+1..].strip_suffix(')')?;
-        // Normalize size: allow bare number or with px. If user supplies expression keep as-is.
         let size_expr = if size_part.chars().all(|c| c.is_ascii_digit()) {
             format!("{}px", size_part)
         } else if size_part.ends_with("px") || size_part.contains(|c: char| c == ' ' || c == '(' || c == ')') {
             size_part.to_string()
         } else {
-            // Assume px if trailing alpha not present
             size_part.to_string()
         };
-        // Split utilities inside parentheses by whitespace
         let inner_utils: Vec<&str> = inner_raw.split(|c: char| c.is_whitespace()).filter(|s| !s.is_empty()).collect();
         if inner_utils.is_empty() { return None; }
         use std::collections::HashMap;
         let mut decls: HashMap<String, (usize, String)> = HashMap::new();
         let mut order: usize = 0;
         for util in &inner_utils {
-            if let Some(raw_css) = self.compute_css(util) { // recursive compute existing utility
-                // Extract declarations from first block only
+            if let Some(raw_css) = self.compute_css(util) {
                 if let Some(open) = raw_css.find('{') { if let Some(close) = raw_css.find('}') { if close > open {
                     let body = &raw_css[open+1..close];
                     for seg in body.split(';') {
@@ -386,8 +369,6 @@ impl StyleEngine {
     }
 
     fn expand_composite(&self, class_name: &str) -> Option<String> {
-        // New direct syntax mapping: grouping expressions are stored verbatim.
-        // Try direct lookup; if not found fall back to legacy hashed naming.
         let comp = if let Some(c) = composites::get(class_name) {
             c
         } else if class_name.starts_with("dx-class-") {
@@ -405,7 +386,7 @@ impl StyleEngine {
                 }
                 if let Some(rest) = t.strip_prefix("fluid:") {
                     let parts: Vec<&str> = rest.split(':').collect();
-                    if parts.len() >= 5 { // fluid:prop:min:minBp:max:maxBp
+                    if parts.len() >= 5 {
                         let prop = parts[0];
                         let min_v = parts[1];
                         let min_bp_key = parts[2];
@@ -436,7 +417,7 @@ impl StyleEngine {
                     let kf_name = format!("dx-motion-keyframe-{}", &hash[..6]);
                     let mut keyframes = String::from("@keyframes "); keyframes.push_str(&kf_name); keyframes.push_str(" {\n  0% { transform: translateY(0) scale(1); }\n  60% { transform: translateY(-6px) scale(1.04); }\n  80% { transform: translateY(2px) scale(0.98); }\n  100% { transform: translateY(0) scale(1); }\n}\n");
                     base_rules.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
-                    base_rules.push(keyframes); // RAW block
+                    base_rules.push(keyframes);
                     continue;
                 } else if let Some(rest) = t.strip_prefix("gradient:mesh:") {
                     let colors: Vec<&str> = rest.split('+').filter(|c| !c.trim().is_empty()).collect();
@@ -446,7 +427,7 @@ impl StyleEngine {
                         let n = colors.len() as f32;
                         for (i, c) in colors.iter().enumerate() {
                             let i_f = i as f32 + 0.5;
-                            let r = i_f / n; // radius fraction
+                            let r = i_f / n;
                             let theta = i_f * phi;
                             let x = 50.0 + r * 40.0 * theta.cos();
                             let y = 50.0 + r * 40.0 * theta.sin();
@@ -470,17 +451,13 @@ impl StyleEngine {
         };
 
         let mut sections: Vec<String> = Vec::new();
-        let (base_rules, mut base_anim_lines) = resolve_tokens(&comp.base);
+        let (base_rules, base_anim_lines) = resolve_tokens(&comp.base);
         let base_join = base_rules.join("; ");
         if !base_join.is_empty() { sections.push(format!("BASE|{}", base_join)); }
         for (child, toks) in &comp.child_rules { let (decl_vec, anim_lines_child) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("CHILD|{}|{}", child, decls)); } for a in anim_lines_child { sections.push(a); } }
         for (state, toks) in &comp.state_rules { let (decl_vec, anim_lines_state) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("STATE|{}|{}", state, decls)); } for a in anim_lines_state { sections.push(a); } }
         for (attr, toks) in &comp.data_attr_rules { let (decl_vec, anim_lines_data) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("DATA|{}|{}", attr, decls)); } for a in anim_lines_data { sections.push(a); } }
         for (cond, toks) in &comp.conditional_blocks { let (decl_vec, anim_lines_cond) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("COND|{}|{}", cond, decls)); } for a in anim_lines_cond { sections.push(a); } }
-        // Animation lines stored in comp.animations use parser formats:
-        //   animate: utility encoded earlier as base token (animate:duration[:delay]) -> handled via generate_animation_css
-        //   from|token+token  / to|token+token / via|token+token  (stage declarations)
-        //   animfill:forwards stored in base tokens -> already in comp.base as animfill:forwards
     for line in base_anim_lines { sections.push(line); }
     for anim in &comp.animations { sections.push(format!("ANIM|{}", anim)); }
         for raw in &comp.extra_raw { sections.push(format!("RAW|{}", raw)); }
@@ -490,35 +467,25 @@ impl StyleEngine {
 
     #[allow(dead_code)]
     pub fn generate_css_for_classes_batch<'a>(&self, class_names: &[&'a str]) -> Vec<String> {
-        // First pass: detect standalone animation chains spread across multiple classes on the same element.
-        // Pattern: animate:duration[:delay] + optional forwards + from(...), to(...), via(...)
-        // We consolidate these into a single CSS output (keyframes + animation rule) and skip
-        // emitting individual stage utilities (which are intentionally suppressed elsewhere).
         use std::collections::{HashMap, HashSet};
         let mut consumed: HashSet<&str> = HashSet::new();
         let mut out: Vec<String> = Vec::with_capacity(class_names.len());
 
-        // Collect stage classes for quick lookup grouped by simple tag (from/to/via) -> tokens inside parens.
-        // Multiple from/to/via of same type are preserved order of appearance.
         let mut index_map: HashMap<&str, usize> = HashMap::new();
         for (i, &c) in class_names.iter().enumerate() { index_map.insert(c, i); }
 
-        // Build a list so we iterate animate utilities in source order.
         for &name in class_names {
             if !name.starts_with("animate:") { continue; }
             if consumed.contains(name) { continue; }
-            // Parse duration and optional delay
             let rest = &name[8..];
             let mut parts = rest.split(':');
             let first_segment = parts.next().unwrap_or("1s").trim();
-            let duration = first_segment; // may be like "1s" only
+            let duration = first_segment;
             let delay = parts.next().unwrap_or("0s").trim();
-            // If this single class includes embedded stages (contains spaces) parse inline.
             let mut inline_from: Vec<String> = Vec::new();
             let mut inline_to: Vec<String> = Vec::new();
             let mut inline_via: Vec<Vec<String>> = Vec::new();
             let mut inline_fill: Option<&str> = None;
-            // Base animate token (first whitespace-separated segment) for selector + hashing
             let base_token = name.split_whitespace().next().unwrap_or(name);
             if name.contains(' ') {
                 for token in name.split_whitespace().skip(1) {
@@ -528,7 +495,6 @@ impl StyleEngine {
                     if let Some(inner) = token.strip_prefix("via(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_via.push(vec![body.split_whitespace().collect::<Vec<_>>().join("+" )]); } continue; } }
                 }
             }
-            // Scan sibling classes for stages and fill mode.
             let mut from_tokens: Vec<String> = Vec::new();
             let mut to_tokens: Vec<String> = Vec::new();
             let mut via_groups: Vec<Vec<String>> = Vec::new();
@@ -536,7 +502,6 @@ impl StyleEngine {
             for &other in class_names {
                 if other == name { continue; }
                 if other == "forwards" { fill_mode = Some("forwards"); consumed.insert(other); continue; }
-                // Match from(...), to(...), via(...)
                 if let Some(inner) = other.strip_prefix("from(") { if let Some(body) = inner.strip_suffix(')') {
                     let toks = body.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>();
                     if !toks.is_empty() { from_tokens.push(toks.join("+")); }
@@ -553,7 +518,6 @@ impl StyleEngine {
                     consumed.insert(other); continue;
                 }}
             }
-            // Merge inline parsed stages (if any) before evaluating emptiness
             if !inline_from.is_empty() || !inline_to.is_empty() || !inline_via.is_empty() || inline_fill.is_some() {
                 from_tokens.extend(inline_from);
                 to_tokens.extend(inline_to);
@@ -561,12 +525,10 @@ impl StyleEngine {
                 if inline_fill.is_some() { fill_mode = inline_fill; }
             }
             if from_tokens.is_empty() && to_tokens.is_empty() && via_groups.is_empty() {
-                // Fallback to existing compute path (will currently produce nothing). Let compute_css handle it.
                 if let Some(css) = self.compute_css(name) { out.push(css); }
                 continue;
             }
             consumed.insert(name);
-            // Build encoded animation lines
             let mut encoded_lines: Vec<String> = Vec::new();
             encoded_lines.push(format!("ANIM|animate|{}|{}", duration, delay));
             if let Some(f) = fill_mode { encoded_lines.push(format!("ANIM|fill|{}", f)); }
@@ -574,7 +536,6 @@ impl StyleEngine {
             for tg in &to_tokens { encoded_lines.push(format!("ANIM|to|{}", tg)); }
             for vg in &via_groups { for v in vg { encoded_lines.push(format!("ANIM|via|{}", v)); } }
             let encoded_css = encoded_lines.join("\n");
-            // Escape selector same way compute_css does.
             let mut escaped_ident = String::with_capacity(base_token.len() + 8);
             struct Acc<'a> { buf: &'a mut String }
             impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s:&str)->fmt::Result { self.buf.push_str(s); Ok(()) } }
@@ -586,7 +547,6 @@ impl StyleEngine {
             out.push(decoded);
         }
 
-        // Second pass: process remaining classes normally (skip those consumed as part of an animation chain or stage utilities)
         for &name in class_names {
             if consumed.contains(name) { continue; }
             if name.starts_with("from(") || name.starts_with("to(") || name.starts_with("via(") || name == "forwards" { continue; }
@@ -652,7 +612,6 @@ impl StyleEngine {
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {
-        // Special meta utility: transition(<duration>) sets standard transition props.
         if let Some(arg) = class_name.strip_prefix("transition(") {
             if let Some(end) = arg.find(')') {
                 let dur = &arg[..end];
@@ -710,13 +669,11 @@ impl StyleEngine {
     }
 
     fn generate_animation_css(&self, full_class: &str) -> Option<String> {
-    // Only handle animate:duration[:delay] utility; do not emit frames here (handled during decode).
     if !full_class.starts_with("animate:") { return None; }
     let rest = &full_class[8..];
     let mut parts = rest.split(':');
     let duration = parts.next().unwrap_or("1s");
     let delay = parts.next().unwrap_or("0s");
-    // Encode as ANIM|animate|duration|delay so decode stage can consolidate with from()/to()/via()
     Some(format!("ANIM|animate|{}|{}", duration, delay))
     }
 }
@@ -737,9 +694,6 @@ impl StyleEngine {
         for line in lines {
             if line.is_empty() { continue; }
                 if let Some(rest) = line.strip_prefix("BASE|") {
-                    // If the original grouping started with a breakpoint (e.g. lg(...)) we do NOT emit a base rule.
-                    // Heuristic: after the leading dot we will have the literal breakpoint token followed by an escaped '('.
-                    // Known breakpoints: collect from self.screens keys.
                     let is_responsive_group = self.screens.keys().any(|bp| selector.starts_with(&format!(".{}\\(", bp)));
                     if !is_responsive_group {
                         if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
@@ -764,7 +718,6 @@ impl StyleEngine {
             } else if let Some(rest) = line.strip_prefix("COND|") {
                 let mut parts = rest.splitn(2,'|'); let cond = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
                 if let Some(val) = cond.strip_prefix("@container>") {
-                    // Single grouped selector within container
                     out.push_str(&format!("@container (min-width: {}) {{\n", val));
                     for l in build_block(selector, decls).lines() { out.push_str("  "); out.push_str(l); out.push('\n'); }
                     out.push_str("}\n");
@@ -779,11 +732,6 @@ impl StyleEngine {
                     }
                 }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
-                // Formats after parser/composite:
-                //   ANIM|animate|duration|delay
-                //   ANIM|from|token+token
-                //   ANIM|to|token+token
-                //   ANIM|via|token+token
                 let parts: Vec<&str> = rest.split('|').collect();
                 if parts.is_empty() { continue; }
                 match parts[0] {
@@ -812,15 +760,11 @@ impl StyleEngine {
             }
         }
         if let Some(pa) = pending_anim.take() {
-            // If no animate: utility was present (only stages), skip emitting keyframes/animation.
             if !pa.has_main { if out.ends_with('\n') { out.pop(); } return out; }
-            // Derive base animate selector (first segment up to first escaped space).
             let base_selector = if let Some(space_idx) = selector.find("\\ ") {
                 &selector[..space_idx]
             } else { selector };
-            // Hash only the base selector so keyframe name stable across stage changes.
             let hash = format!("{:x}", seahash::hash(base_selector.as_bytes()));
-            // Build frames
             let mut frames: Vec<(u32,String)> = Vec::new();
             if !pa.from.is_empty() { frames.push((0, self.resolve_animation_tokens(&pa.from))); }
             if !pa.to_.is_empty() { frames.push((100, self.resolve_animation_tokens(&pa.to_))); }
@@ -832,7 +776,6 @@ impl StyleEngine {
                 }
             }
             frames.sort_by_key(|(p, _)| *p);
-            // Only emit if we have at least one frame with declarations
             let mut kf_body = String::new();
             for (pct, decls) in &frames {
                 let dtrim = decls.trim(); if dtrim.is_empty() { continue; }
@@ -841,13 +784,11 @@ impl StyleEngine {
             }
             if !kf_body.is_empty() {
                 out.push_str("@keyframes dx-anim-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
-                // Build animation shorthand: duration [delay] [fillMode] name
                 let mut parts: Vec<String> = Vec::new();
                 parts.push(pa.duration.clone());
                 if pa.delay != "0s" { parts.push(pa.delay.clone()); }
                 if !pa.fill_mode.is_empty() { parts.push(pa.fill_mode.clone()); }
                 parts.push(format!("dx-anim-{}", hash));
-                // Sanitize: remove any accidental stage tokens or duplicate fill modes
                 let mut filtered: Vec<String> = Vec::new();
                 let mut seen_fill = false;
                 for p in parts.into_iter() {
@@ -863,14 +804,12 @@ impl StyleEngine {
         out
     }
 
-    // Resolve animation stage tokens (like opacity-0, translate-y-4) into declarations using existing generation paths.
     fn resolve_animation_tokens(&self, tokens: &[String]) -> String {
         let mut decls: Vec<String> = Vec::new();
         for t in tokens {
             for piece in t.split('+') {
                 let piece = piece.trim(); if piece.is_empty() { continue; }
                 if let Some(css) = self.precompiled.get(piece) { decls.push(css.clone()); continue; }
-                // Minimal built-in mappings for animation tokens when precompiled map lacks entries.
                 if let Some(rest) = piece.strip_prefix("opacity-") {
                     if let Ok(num) = rest.parse::<u32>() { let val = if num >= 100 { "1".to_string() } else { format!("{}", (num as f32)/100.0) }; decls.push(format!("opacity: {}", val)); continue; }
                 }
@@ -878,7 +817,6 @@ impl StyleEngine {
                 if let Some(d) = self.generate_dynamic_css(piece) { decls.push(d); continue; }
             }
         }
-        // Deduplicate later properties by name
         let mut last_for: HashMap<&str, usize> = HashMap::new();
         for (i, d) in decls.iter().enumerate() { if let Some(idx) = d.find(':') { let name = d[..idx].trim(); last_for.insert(name, i); } }
         let mut out = String::new();
@@ -897,7 +835,7 @@ impl StyleEngine {
                 wrapped.push_str(line);
                 wrapped.push('\n');
             }
-            wrapped.push_str("}\n"); // closing for this media/container
+            wrapped.push_str("}\n");
             css_body = wrapped;
         }
         if !css_body.ends_with('\n') { css_body.push('\n'); }
@@ -916,7 +854,7 @@ fn build_block(selector: &str, declarations: &str) -> String {
     for (i,p) in parts.iter().enumerate() {
         let pt = p.trim(); if pt.is_empty() { continue; }
         let name = pt.split(':').next().unwrap_or("").trim();
-        if seen.get(name)==Some(&i) { // last occurrence
+        if seen.get(name)==Some(&i) {
             s.push_str("  ");
             s.push_str(pt.trim_end_matches(';'));
             s.push_str(";\n");
@@ -943,4 +881,3 @@ fn sanitize_declarations(input: &str) -> String {
     }
     out
 }
-
