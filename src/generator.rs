@@ -85,11 +85,49 @@ fn normalize_generated_css(css: &str) -> String {
 
     out = remove_orphan_selectors(&out);
     out = reescape_leading_invalid_identifiers(&out);
+    out = normalize_child_combinator_spacing(&out);
 
     // Insert into cache (ignore if poisoned)
     if out.len() <= 16 * 1024 { // don't cache very large blocks
         if let Ok(mut cache) = NORMALIZE_CACHE.lock() { cache.put(key, Arc::new(out.clone())); }
     }
+    out
+}
+
+// Ensure there is a space on both sides of the child combinator '>' in selectors.
+// We operate on the whole CSS text but skip regions that are clearly inside declaration blocks
+// (naively tracked via brace depth) to reduce risk of touching values like content: ">".
+fn normalize_child_combinator_spacing(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 8);
+    let mut depth = 0usize; // counts nested '{' minus '}' to know if we're inside declarations
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        match c {
+            '{' => { depth += 1; out.push(c); i += 1; },
+            '}' => { if depth > 0 { depth -= 1; } out.push(c); i += 1; },
+            '>' if depth == 0 => {
+                // Normalize spacing around child combinator
+                // Remove any trailing spaces just to re-insert single spacing consistently
+                while out.ends_with(' ') { out.pop(); }
+                // Ensure single space before '>' unless previous significant char is start of selector list delimiter
+                if !out.ends_with([' ', '\n', '\t', ',', '{']) { out.push(' '); }
+                out.push('>');
+                // Skip any spaces already following in source
+                i += 1;
+                while i < bytes.len() && (bytes[i] as char).is_whitespace() { if bytes[i] as char == '\n' { break; } i += 1; }
+                // Add space after '>' if next char is not whitespace, newline, '{', or ','
+                if i < bytes.len() {
+                    let next = bytes[i] as char;
+                    if !matches!(next, ' ' | '\n' | '\t' | '{' | ',' | '>') { out.push(' '); }
+                }
+            }
+            _ => { out.push(c); i += 1; }
+        }
+    }
+    // If no change (sizes equal and identical) early return original to keep Arc reuse potential higher
+    if out == input { return input.to_string(); }
     out
 }
 
