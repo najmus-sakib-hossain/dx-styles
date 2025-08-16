@@ -40,10 +40,10 @@ fn normalize_generated_css(css: &str) -> String {
     let mut out = css.to_string();
 
     out = fix_missing_dot_for_escaped_symbol_groups(&out);
-    out = simplify_local_component_groups(&out);
-    out = simplify_known_group_patterns(&out);
-    out = simplify_group_parents_in_complex_selectors(&out);
-    out = sanitize_class_selectors(&out);
+    // IMPORTANT: Preserve full grouped selector names (e.g. .card\(p-13 ...\)).
+    // Previous passes simplified/group-collapsed selectors causing collisions (.card, .from, etc.).
+    // We intentionally skip those transforms to maintain 1:1 mapping with source TSX.
+    // (If needed later, add an opt-in production minifier flag instead.)
     out = remove_selector_blocks(&out, |sel| sel.starts_with(".dx-class-") && sel.len() >= 18);
 
     const VARIANTS: &[&str] = &[

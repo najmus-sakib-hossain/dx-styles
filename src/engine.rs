@@ -6,6 +6,8 @@ use std::fs;
 use std::num::NonZeroUsize;
 use std::sync::{Mutex, RwLock};
 use std::sync::Arc;
+use cssparser::serialize_identifier;
+use std::fmt; // for serialize_identifier target impl
 
 mod styles_generated {
     #![allow(
@@ -228,24 +230,19 @@ impl StyleEngine {
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
             css = sanitize_declarations(&css);
-            let mut selector = String::with_capacity(class_name.len() + pseudo_classes.len() + 1);
-            selector.push('.');
-            // Minimal escaping: only escape ':' and '@' if not already escaped in source to avoid double escaping downstream.
-            let mut prev_was_backslash = false;
-            for ch in class_name.chars() {
-                match ch {
-                    ':' => {
-                        if !prev_was_backslash { selector.push_str("\\:"); } else { selector.push(':'); }
-                        prev_was_backslash = false;
-                    }
-                    '@' => {
-                        if !prev_was_backslash { selector.push_str("\\@"); } else { selector.push('@'); }
-                        prev_was_backslash = false;
-                    }
-                    '\\' => { selector.push('\\'); prev_was_backslash = !prev_was_backslash; }
-                    _ => { selector.push(ch); prev_was_backslash = false; }
+            // Build escaped selector using cssparser just like interner.
+            let mut escaped_ident = String::with_capacity(class_name.len() + 8);
+            struct Acc<'a> { buf: &'a mut String }
+            impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s:&str)->fmt::Result { self.buf.push_str(s); Ok(()) } }
+            if serialize_identifier(class_name, &mut Acc { buf: &mut escaped_ident }).is_err() {
+                // Fallback: minimal legacy escaping
+                for ch in class_name.chars() {
+                    match ch { ':'=>escaped_ident.push_str("\\:"), '@'=>escaped_ident.push_str("\\@"), '('=>escaped_ident.push_str("\\("), ')'=>escaped_ident.push_str("\\)"), ' '=>escaped_ident.push_str("\\ "), '/' => escaped_ident.push_str("\\/"), '\\'=>escaped_ident.push_str("\\\\"), _=>escaped_ident.push(ch) }
                 }
             }
+            let mut selector = String::with_capacity(escaped_ident.len() + pseudo_classes.len() + 2);
+            selector.push('.');
+            selector.push_str(&escaped_ident);
             selector.push_str(&pseudo_classes);
             let blocks = self.decode_encoded_css(&css, &selector, &wrappers);
             self.wrap_media_queries(blocks, &media_queries)
@@ -565,13 +562,19 @@ impl StyleEngine {
         let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css] };
         for line in lines {
             if line.is_empty() { continue; }
-            if let Some(rest) = line.strip_prefix("BASE|") {
-                // Suppress base for responsive group selectors like .lg\(
-                if !(selector.contains(".lg\\(") || selector.contains(".sm\\(") || selector.contains(".md\\(") || selector.contains(".xl\\(")) {
-                    if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
-                    else { for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, rest)); out.push('\n'); } if out.ends_with('\n') { out.pop(); } }
-                    out.push('\n');
-                }
+                if let Some(rest) = line.strip_prefix("BASE|") {
+                    // If the original grouping started with a breakpoint (e.g. lg(...)) we do NOT emit a base rule.
+                    // Heuristic: after the leading dot we will have the literal breakpoint token followed by an escaped '('.
+                    // Known breakpoints: collect from self.screens keys.
+                    let is_responsive_group = self.screens.keys().any(|bp| selector.starts_with(&format!(".{}\\(", bp)));
+                    if !is_responsive_group {
+                        if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
+                        else {
+                            for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, rest)); out.push('\n'); }
+                            if out.ends_with('\n') { out.pop(); }
+                        }
+                        out.push('\n');
+                    }
             } else if let Some(rest) = line.strip_prefix("STATE|") {
                 let mut parts = rest.splitn(2,'|'); let state = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
                 if state == "dark" { out.push_str(&build_block(&format!(".dark {}", selector), decls)); }

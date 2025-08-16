@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use cssparser::serialize_identifier;
+use std::fmt;
 
 pub struct ClassInterner {
     map: HashMap<String, u32>,
@@ -17,21 +19,37 @@ impl ClassInterner {
         if let Some(&id) = self.map.get(s) { return id; }
         let id = self.strings.len() as u32;
         self.strings.push(s.to_string());
-        let mut esc = String::with_capacity(s.len() + 4);
-        for ch in s.chars() {
-            match ch {
-                ':' => esc.push_str("\\:"),
-                '@' => esc.push_str("\\@"),
-                '(' => esc.push_str("\\("),
-                ')' => esc.push_str("\\)"),
-                ' ' => esc.push_str("\\ "),
-                '/' => esc.push_str("\\/"),
-                '\\' => esc.push_str("\\\\"),
-                // we can add more escaping here if needed for other special chars
-                _ => esc.push(ch),
+
+        // Use cssparser's identifier serializer to robustly escape the class name so
+        // the generated selector matches the original literal in TSX (after CSS escaping)
+        // without us heuristically deciding which chars to escape. This ensures spaces,
+        // punctuation, leading digits, etc. are all handled per the CSS spec.
+        let mut escaped = String::with_capacity(s.len() + 8);
+        // cssparser::serialize_identifier writes only the identifier itself (no leading '.')
+        // and guarantees a valid CSS ident that represents the same string.
+        // If serialization fails (shouldn't), we fallback.
+        struct Acc<'a> { buf: &'a mut String }
+        impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s: &str) -> fmt::Result { self.buf.push_str(s); Ok(()) } }
+        let serialize_result = {
+            let mut acc = Acc { buf: &mut escaped };
+            serialize_identifier(s, &mut acc)
+        };
+        if serialize_result.is_err() {
+            escaped.clear();
+            for ch in s.chars() {
+                match ch {
+                    ':' => escaped.push_str("\\:"),
+                    '@' => escaped.push_str("\\@"),
+                    '(' => escaped.push_str("\\("),
+                    ')' => escaped.push_str("\\)"),
+                    ' ' => escaped.push_str("\\ "),
+                    '/' => escaped.push_str("\\/"),
+                    '\\' => escaped.push_str("\\\\"),
+                    _ => escaped.push(ch),
+                }
             }
         }
-        self.escaped.push(esc);
+        self.escaped.push(escaped);
         self.map.insert(self.strings[id as usize].clone(), id);
         id
     }
