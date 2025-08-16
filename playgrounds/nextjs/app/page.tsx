@@ -78,7 +78,7 @@ export default function Home() {
             <input
               type="text"
               placeholder="Focus me"
-              className="p-4 border rounded-lg focus($focus-ring)"
+              className="p-15 border rounded-lg focus($focus-ring)"
             />
           </div>
         </div>

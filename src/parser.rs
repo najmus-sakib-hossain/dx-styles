@@ -1,12 +1,12 @@
+use crate::composites::{self, Composite};
+use crate::interner::ClassInterner;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     self, ExportDefaultDeclarationKind, JSXAttributeItem, JSXOpeningElement, Program,
 };
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use std::collections::{HashSet, HashMap};
-use crate::composites::{self, Composite};
-use crate::interner::ClassInterner;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -42,30 +42,75 @@ struct ClassNameVisitor {
 
 impl ClassNameVisitor {
     fn expand_grouping(&mut self, raw: &str) -> Vec<String> {
-        const SCREENS: &[&str] = &["xs","sm","md","lg","xl","2xl"];
+        const SCREENS: &[&str] = &["xs", "sm", "md", "lg", "xl", "2xl"];
         const STATES: &[&str] = &[
-            "hover","focus","focus-within","focus-visible","active","visited","disabled","checked","first","last","odd","even","required","optional","valid","invalid","read-only","before","after","placeholder","file","marker","selection","group-hover","group-focus","group-active","group-visited","peer-checked","peer-focus","peer-active","peer-hover","empty","target"
+            "hover",
+            "focus",
+            "focus-within",
+            "focus-visible",
+            "active",
+            "visited",
+            "disabled",
+            "checked",
+            "first",
+            "last",
+            "odd",
+            "even",
+            "required",
+            "optional",
+            "valid",
+            "invalid",
+            "read-only",
+            "before",
+            "after",
+            "placeholder",
+            "file",
+            "marker",
+            "selection",
+            "group-hover",
+            "group-focus",
+            "group-active",
+            "group-visited",
+            "peer-checked",
+            "peer-focus",
+            "peer-active",
+            "peer-hover",
+            "empty",
+            "target",
         ];
-        const CQS: &[&str] = &["@xs","@sm","@md","@lg","@xl","@2xl","@3xl","@4xl","@5xl","@6xl","@7xl","@8xl","@9xl"];
+        const CQS: &[&str] = &[
+            "@xs", "@sm", "@md", "@lg", "@xl", "@2xl", "@3xl", "@4xl", "@5xl", "@6xl", "@7xl",
+            "@8xl", "@9xl",
+        ];
         let screens: HashSet<&str> = SCREENS.iter().copied().collect();
         let states: HashSet<&str> = STATES.iter().copied().collect();
         let cqs: HashSet<&str> = CQS.iter().copied().collect();
 
         let mut out = Vec::new();
-    let mut pending: Option<Composite> = None;
+        let mut pending: Option<Composite> = None;
         let mut local_components: HashMap<String, Vec<String>> = HashMap::new();
-        let ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
-    let mut i = 0usize;
-    let bytes = raw.as_bytes();
-    let mut animate_mode = false; // inside animate chain (animate:... followed by from()/to()/via()/forwards)
-    let mut animate_group_start: Option<usize> = None;
-    while i < bytes.len() {
-            while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
-            if i >= bytes.len() { break; }
+        let ensure = |pending: &mut Option<Composite>| {
+            if pending.is_none() {
+                *pending = Some(Composite::default());
+            }
+        };
+        let mut i = 0usize;
+        let bytes = raw.as_bytes();
+        let mut animate_mode = false; // inside animate chain (animate:... followed by from()/to()/via()/forwards)
+        let mut animate_group_start: Option<usize> = None;
+        while i < bytes.len() {
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i >= bytes.len() {
+                break;
+            }
             let start = i;
             while i < bytes.len() {
                 let c = bytes[i] as char;
-                if c == '(' || c.is_ascii_whitespace() { break; }
+                if c == '(' || c.is_ascii_whitespace() {
+                    break;
+                }
                 i += 1;
             }
             let ident = &raw[start..i];
@@ -75,13 +120,15 @@ impl ClassNameVisitor {
                 let mut depth = 1;
                 while i < bytes.len() && depth > 0 {
                     let c = bytes[i] as char;
-                    if c == '(' { depth += 1; }
-                    else if c == ')' { depth -= 1; }
+                    if c == '(' {
+                        depth += 1;
+                    } else if c == ')' {
+                        depth -= 1;
+                    }
                     i += 1;
                 }
                 let inner_end = i.saturating_sub(1);
                 let inner = &raw[inner_start..inner_end];
-                // Grouping expression substring (raw[start..i]) currently unused after refactor
                 let mut nested_children: Vec<(String, Vec<String>)> = Vec::new();
                 let _simple_inner_source = inner.to_string();
                 {
@@ -90,20 +137,44 @@ impl ClassNameVisitor {
                     while j < chars.len() {
                         if chars[j].is_alphabetic() {
                             let start_tag = j;
-                            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '-') { j += 1; }
-                            if j < chars.len() && chars[j] == '(' {
-                                j += 1; let content_start = j; let mut d = 1;
-                                while j < chars.len() && d > 0 { if chars[j] == '(' { d += 1; } else if chars[j] == ')' { d -= 1; } j += 1; }
-                                let content_end = j.saturating_sub(1);
-                                let tag = inner[start_tag..].split('(').next().unwrap_or("").to_string();
-                                let content = &inner[content_start..content_end];
-                                let toks: Vec<String> = content.split_whitespace().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
-                                if !tag.is_empty() && !toks.is_empty() { nested_children.push((tag, toks)); }
+                            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '-')
+                            {
+                                j += 1;
                             }
-                        } else { j += 1; }
+                            if j < chars.len() && chars[j] == '(' {
+                                j += 1;
+                                let content_start = j;
+                                let mut d = 1;
+                                while j < chars.len() && d > 0 {
+                                    if chars[j] == '(' {
+                                        d += 1;
+                                    } else if chars[j] == ')' {
+                                        d -= 1;
+                                    }
+                                    j += 1;
+                                }
+                                let content_end = j.saturating_sub(1);
+                                let tag = inner[start_tag..]
+                                    .split('(')
+                                    .next()
+                                    .unwrap_or("")
+                                    .to_string();
+                                let content = &inner[content_start..content_end];
+                                let toks: Vec<String> = content
+                                    .split_whitespace()
+                                    .filter(|s| !s.is_empty())
+                                    .map(|s| s.to_string())
+                                    .collect();
+                                if !tag.is_empty() && !toks.is_empty() {
+                                    nested_children.push((tag, toks));
+                                }
+                            }
+                        } else {
+                            j += 1;
+                        }
                     }
                 }
-                if !nested_children.is_empty() { }
+                if !nested_children.is_empty() {}
                 let inner_tokens: Vec<String> = inner
                     .split(|c: char| c.is_whitespace() || c == ',')
                     .filter(|s| !s.is_empty())
@@ -113,15 +184,23 @@ impl ClassNameVisitor {
                     let additive = ident.starts_with('+');
                     let cname = ident.trim_start_matches(|c| c == '+' || c == '-');
                     let mut tokens: Vec<String> = Vec::new();
-                    if let Some(base) = self.components.get(cname) { tokens.extend(base.iter().cloned()); }
-                    if let Some(base) = local_components.get(cname) { tokens.extend(base.iter().cloned()); }
+                    if let Some(base) = self.components.get(cname) {
+                        tokens.extend(base.iter().cloned());
+                    }
+                    if let Some(base) = local_components.get(cname) {
+                        tokens.extend(base.iter().cloned());
+                    }
                     if additive {
                         tokens.extend(inner_tokens.into_iter());
                     } else {
                         let filters = inner_tokens;
                         let mut filtered: Vec<String> = Vec::new();
                         'tok: for t in tokens.into_iter() {
-                            for f in &filters { if t.starts_with(f) { continue 'tok; } }
+                            for f in &filters {
+                                if t.starts_with(f) {
+                                    continue 'tok;
+                                }
+                            }
                             filtered.push(t);
                         }
                         tokens = filtered;
@@ -132,24 +211,58 @@ impl ClassNameVisitor {
                     }
                 } else if screens.contains(ident) {
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.conditional_blocks.push((format!("screen:{}", ident), inner_tokens)); }
-                } else if states.contains(ident) || cqs.contains(ident) || ident == "dark" || ident == "light" {
+                    if let Some(c) = &mut pending {
+                        c.conditional_blocks
+                            .push((format!("screen:{}", ident), inner_tokens));
+                    }
+                } else if states.contains(ident)
+                    || cqs.contains(ident)
+                    || ident == "dark"
+                    || ident == "light"
+                {
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.state_rules.push((ident.to_string(), inner_tokens)); }
-                } else if ident == "div" || ident == "span" || ident == "p" || ident == "h1" || ident == "h2" || ident == "h3" || ident == "h4" || ident == "h5" || ident == "h6" || ident == "ul" || ident == "li" || ident == "section" || ident == "header" || ident == "footer" || ident == "main" || ident == "nav" {
+                    if let Some(c) = &mut pending {
+                        c.state_rules.push((ident.to_string(), inner_tokens));
+                    }
+                } else if ident == "div"
+                    || ident == "span"
+                    || ident == "p"
+                    || ident == "h1"
+                    || ident == "h2"
+                    || ident == "h3"
+                    || ident == "h4"
+                    || ident == "h5"
+                    || ident == "h6"
+                    || ident == "ul"
+                    || ident == "li"
+                    || ident == "section"
+                    || ident == "header"
+                    || ident == "footer"
+                    || ident == "main"
+                    || ident == "nav"
+                {
                     ensure(&mut pending);
-                    if let Some(c) = &mut pending { c.child_rules.push((ident.to_string(), inner_tokens)); }
-                    if let Some(c) = &mut pending { for (tag, toks) in nested_children { c.child_rules.push((tag, toks)); } }
+                    if let Some(c) = &mut pending {
+                        c.child_rules.push((ident.to_string(), inner_tokens));
+                    }
+                    if let Some(c) = &mut pending {
+                        for (tag, toks) in nested_children {
+                            c.child_rules.push((tag, toks));
+                        }
+                    }
                 } else if ident.starts_with('*') {
                     ensure(&mut pending);
                     let attr_name = ident.trim_start_matches('*').to_string();
-                    if let Some(c) = &mut pending { c.data_attr_rules.push((attr_name, inner_tokens)); }
+                    if let Some(c) = &mut pending {
+                        c.data_attr_rules.push((attr_name, inner_tokens));
+                    }
                 } else if ident.starts_with('?') {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let cond = &ident[1..];
                         if let Some(rest) = cond.strip_prefix("@self:") {
-                            c.conditional_blocks.push((format!("self:{}", rest), inner_tokens));
+                            c.conditional_blocks
+                                .push((format!("self:{}", rest), inner_tokens));
                         } else {
                             c.conditional_blocks.push((cond.to_string(), inner_tokens));
                         }
@@ -158,12 +271,30 @@ impl ClassNameVisitor {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let raw_prop = ident.trim_start_matches('~');
-                        let prop = if raw_prop == "text" { "font-size" } else { raw_prop };
-                        let pieces: Vec<&str> = inner.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                        let prop = if raw_prop == "text" {
+                            "font-size"
+                        } else {
+                            raw_prop
+                        };
+                        let pieces: Vec<&str> = inner
+                            .split(',')
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .collect();
                         if pieces.len() >= 2 {
-                            let parse_part = |s: &str| -> Option<(String,String)> { let mut parts = s.split('@'); let v = parts.next()?.trim().to_string(); let bp = parts.next().unwrap_or("base").trim().to_string(); Some((v,bp)) };
-                            if let (Some((min_v, min_bp)), Some((max_v, max_bp))) = (parse_part(pieces[0]), parse_part(pieces[1])) {
-                                c.base.push(format!("fluid:{}:{}:{}:{}:{}", prop, min_v, min_bp, max_v, max_bp));
+                            let parse_part = |s: &str| -> Option<(String, String)> {
+                                let mut parts = s.split('@');
+                                let v = parts.next()?.trim().to_string();
+                                let bp = parts.next().unwrap_or("base").trim().to_string();
+                                Some((v, bp))
+                            };
+                            if let (Some((min_v, min_bp)), Some((max_v, max_bp))) =
+                                (parse_part(pieces[0]), parse_part(pieces[1]))
+                            {
+                                c.base.push(format!(
+                                    "fluid:{}:{}:{}:{}:{}",
+                                    prop, min_v, min_bp, max_v, max_bp
+                                ));
                             }
                         }
                     }
@@ -174,35 +305,51 @@ impl ClassNameVisitor {
                         let mut buf = String::new();
                         for ch in inner.chars() {
                             match ch {
-                                '[' | ']' | ',' => { if !buf.trim().is_empty() { colors.push(buf.trim().trim_matches(']').trim_matches('[').to_string()); } buf.clear(); },
+                                '[' | ']' | ',' => {
+                                    if !buf.trim().is_empty() {
+                                        colors.push(
+                                            buf.trim()
+                                                .trim_matches(']')
+                                                .trim_matches('[')
+                                                .to_string(),
+                                        );
+                                    }
+                                    buf.clear();
+                                }
                                 _ => buf.push(ch),
                             }
                         }
-                        if !buf.trim().is_empty() { colors.push(buf.trim().to_string()); }
-                        if !colors.is_empty() { c.base.push(format!("gradient:mesh:{}", colors.join("+"))); }
+                        if !buf.trim().is_empty() {
+                            colors.push(buf.trim().to_string());
+                        }
+                        if !colors.is_empty() {
+                            c.base
+                                .push(format!("gradient:mesh:{}", colors.join("+")));
+                        }
                     }
                 } else if ident.starts_with('$') {
                     if !inner_tokens.is_empty() {
                         let cname = &ident[1..];
                         let composite_class = composites::get_or_create(&inner_tokens);
-                        self.components.entry(cname.to_string()).or_insert(inner_tokens.clone());
+                        self.components
+                            .entry(cname.to_string())
+                            .or_insert(inner_tokens.clone());
                         out.push(composite_class);
                     }
                 } else if ident.starts_with('_') {
                     let cname = ident.trim_start_matches('_');
-                    local_components.entry(cname.to_string()).or_insert(inner_tokens.clone());
+                    local_components
+                        .entry(cname.to_string())
+                        .or_insert(inner_tokens.clone());
                     ensure(&mut pending);
-        } else if ident == "from" || ident == "to" || ident == "via" {
+                } else if ident == "from" || ident == "to" || ident == "via" {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let stage = ident.to_string();
-                        // Store animation stage lines in the simplified format expected by the decoder:
-                        //   from|prop-token+prop-token
-                        // The engine will later resolve each prop token to real declarations and
-                        // consolidate them into @keyframes.
                         let line = format!("{}|{}", stage, inner_tokens.join("+"));
                         c.animations.push(line);
-            if !animate_mode { /* stage without animate: prefix; treat as independent grouping */ }
+                        if !animate_mode { /* stage without animate: prefix; treat as independent grouping */
+                        }
                     }
                 } else if ident == "motion" {
                     ensure(&mut pending);
@@ -211,84 +358,161 @@ impl ClassNameVisitor {
                     }
                 } else {
                     if !self.components.contains_key(ident) {
-                        self.components.insert(ident.to_string(), inner_tokens.clone());
+                        self.components
+                            .insert(ident.to_string(), inner_tokens.clone());
                     }
-                    if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
+                    if let Some(list) = self.components.get(ident) {
+                        ensure(&mut pending);
+                        if let Some(c) = &mut pending {
+                            c.base.extend(list.iter().cloned());
+                        }
+                    }
                 }
 
-                // Decide whether to finalize grouping now. If we're inside an animate chain, we delay finalization
-                // until the chain ends (non-stage token without parentheses or end of input).
-                let is_stage = ident == "from" || ident == "to" || ident == "via";
                 let should_finalize = if animate_mode { false } else { true };
-                if should_finalize { if let Some(mut c_emit) = pending.take() {
-                    let expand_component_tokens = |tokens: &mut Vec<String>| {
-                        let mut expanded: Vec<String> = Vec::new();
-                        for t in tokens.iter() {
-                            if let Some(name) = t.strip_prefix('$') {
-                                if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
-                                if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
-                            } else if let Some(name) = t.strip_prefix('_') {
-                                if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
-                                if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
-                            }
-                            expanded.push(t.clone());
-                        }
-                        *tokens = expanded;
-                    };
-                    for (_, toks) in c_emit.state_rules.iter_mut() { expand_component_tokens(toks); }
-                    for (_, toks) in c_emit.child_rules.iter_mut() { expand_component_tokens(toks); }
-                    for (_, toks) in c_emit.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
-                    for (_, toks) in c_emit.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
-                    expand_component_tokens(&mut c_emit.base);
-                    let slice_start = animate_group_start.unwrap_or(start);
-                    let class_name = composites::register_grouping_raw(raw[slice_start..i].trim(), c_emit);
-                    out.push(class_name);
-                    animate_group_start = None;
-                } }
-            } else {
-                if ident.starts_with('_') {
-                    ensure(&mut pending);
-                    let cname = ident.trim_start_matches('_');
-                    if let Some(local) = local_components.get(cname) { if let Some(c) = &mut pending { c.base.extend(local.clone()); } }
-                    else if let Some(global) = self.components.get(cname) { if let Some(c)= &mut pending { c.base.extend(global.clone()); } }
-                } else if ident == "forwards" {
-                    ensure(&mut pending); if let Some(c)= &mut pending { c.base.push("animfill:forwards".to_string()); }
-                    if animate_mode { /* still inside animate chain */ } 
-                } else if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
-                else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); if ident.starts_with("animate:") { animate_mode = true; animate_group_start = Some(start); } else if animate_mode { // animate chain ended by encountering non-stage token
-                        animate_mode = false; }
-                    } }
-                // When animate chain ends due to plain token, finalize pending composite if it has animation stages.
-                if !animate_mode {
-                    if let Some(c) = &pending { if !c.animations.is_empty() { if let Some(mut emit) = pending.take() {
+                if should_finalize {
+                    if let Some(mut c_emit) = pending.take() {
                         let expand_component_tokens = |tokens: &mut Vec<String>| {
                             let mut expanded: Vec<String> = Vec::new();
                             for t in tokens.iter() {
                                 if let Some(name) = t.strip_prefix('$') {
-                                    if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
-                                    if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                                    if let Some(base) = self.components.get(name) {
+                                        expanded.extend(base.clone());
+                                        continue;
+                                    }
+                                    if let Some(base) = local_components.get(name) {
+                                        expanded.extend(base.clone());
+                                        continue;
+                                    }
                                 } else if let Some(name) = t.strip_prefix('_') {
-                                    if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
-                                    if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                                    if let Some(base) = local_components.get(name) {
+                                        expanded.extend(base.clone());
+                                        continue;
+                                    }
+                                    if let Some(base) = self.components.get(name) {
+                                        expanded.extend(base.clone());
+                                        continue;
+                                    }
                                 }
                                 expanded.push(t.clone());
                             }
                             *tokens = expanded;
                         };
-                        for (_, toks) in emit.state_rules.iter_mut() { expand_component_tokens(toks); }
-                        for (_, toks) in emit.child_rules.iter_mut() { expand_component_tokens(toks); }
-                        for (_, toks) in emit.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
-                        for (_, toks) in emit.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
-                        expand_component_tokens(&mut emit.base);
+                        for (_, toks) in c_emit.state_rules.iter_mut() {
+                            expand_component_tokens(toks);
+                        }
+                        for (_, toks) in c_emit.child_rules.iter_mut() {
+                            expand_component_tokens(toks);
+                        }
+                        for (_, toks) in c_emit.data_attr_rules.iter_mut() {
+                            expand_component_tokens(toks);
+                        }
+                        for (_, toks) in c_emit.conditional_blocks.iter_mut() {
+                            expand_component_tokens(toks);
+                        }
+                        expand_component_tokens(&mut c_emit.base);
                         let slice_start = animate_group_start.unwrap_or(start);
-                        let class_name = composites::register_grouping_raw(raw[slice_start..i].trim(), emit);
+                        let class_name =
+                            composites::register_grouping_raw(raw[slice_start..i].trim(), c_emit);
                         out.push(class_name);
                         animate_group_start = None;
-                    } }
+                    }
+                }
+            } else {
+                if ident.starts_with('_') {
+                    ensure(&mut pending);
+                    let cname = ident.trim_start_matches('_');
+                    if let Some(local) = local_components.get(cname) {
+                        if let Some(c) = &mut pending {
+                            c.base.extend(local.clone());
+                        }
+                    } else if let Some(global) = self.components.get(cname) {
+                        if let Some(c) = &mut pending {
+                            c.base.extend(global.clone());
+                        }
+                    }
+                } else if ident == "forwards" {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        c.base.push("animfill:forwards".to_string());
+                    }
+                    if animate_mode { /* still inside animate chain */
+                    }
+                } else if let Some(list) = self.components.get(ident) {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        c.base.extend(list.iter().cloned());
+                    }
+                } else {
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        c.base.push(ident.to_string());
+                        if ident.starts_with("animate:") {
+                            animate_mode = true;
+                            animate_group_start = Some(start);
+                        } else if animate_mode {
+                            animate_mode = false;
+                        }
+                    }
+                }
+                if !animate_mode {
+                    if let Some(c) = &pending {
+                        if !c.animations.is_empty() {
+                            if let Some(mut emit) = pending.take() {
+                                let expand_component_tokens = |tokens: &mut Vec<String>| {
+                                    let mut expanded: Vec<String> = Vec::new();
+                                    for t in tokens.iter() {
+                                        if let Some(name) = t.strip_prefix('$') {
+                                            if let Some(base) = self.components.get(name) {
+                                                expanded.extend(base.clone());
+                                                continue;
+                                            }
+                                            if let Some(base) = local_components.get(name) {
+                                                expanded.extend(base.clone());
+                                                continue;
+                                            }
+                                        } else if let Some(name) = t.strip_prefix('_') {
+                                            if let Some(base) = local_components.get(name) {
+                                                expanded.extend(base.clone());
+                                                continue;
+                                            }
+                                            if let Some(base) = self.components.get(name) {
+                                                expanded.extend(base.clone());
+                                                continue;
+                                            }
+                                        }
+                                        expanded.push(t.clone());
+                                    }
+                                    *tokens = expanded;
+                                };
+                                for (_, toks) in emit.state_rules.iter_mut() {
+                                    expand_component_tokens(toks);
+                                }
+                                for (_, toks) in emit.child_rules.iter_mut() {
+                                    expand_component_tokens(toks);
+                                }
+                                for (_, toks) in emit.data_attr_rules.iter_mut() {
+                                    expand_component_tokens(toks);
+                                }
+                                for (_, toks) in emit.conditional_blocks.iter_mut() {
+                                    expand_component_tokens(toks);
+                                }
+                                expand_component_tokens(&mut emit.base);
+                                let slice_start = animate_group_start.unwrap_or(start);
+                                let class_name = composites::register_grouping_raw(
+                                    raw[slice_start..i].trim(),
+                                    emit,
+                                );
+                                out.push(class_name);
+                                animate_group_start = None;
+                            }
+                        }
+                    }
                 }
             }
         }
-        if let Some(c) = pending { // finalize trailing
+        if let Some(c) = pending {
+            // finalize trailing
             if !c.animations.is_empty() {
                 let slice_start = animate_group_start.unwrap_or(0);
                 let class_name = composites::register_grouping_raw(raw[slice_start..].trim(), c);
@@ -299,9 +523,7 @@ impl ClassNameVisitor {
         }
         out
     }
-}
 
-impl ClassNameVisitor {
     fn visit_program(&mut self, program: &Program) {
         for stmt in &program.body {
             self.visit_statement(stmt);
@@ -438,7 +660,9 @@ impl ClassNameVisitor {
                     if ident.name == "className" {
                         if let Some(ast::JSXAttributeValue::StringLiteral(lit)) = &attr.value {
                             let expanded = self.expand_grouping(&lit.value);
-                            for cn in expanded { self.class_names.insert(cn); }
+                            for cn in expanded {
+                                self.class_names.insert(cn);
+                            }
                         }
                     }
                 }

@@ -489,8 +489,106 @@ impl StyleEngine {
 
     #[allow(dead_code)]
     pub fn generate_css_for_classes_batch<'a>(&self, class_names: &[&'a str]) -> Vec<String> {
-        let mut out = Vec::with_capacity(class_names.len());
-        for &name in class_names { if let Some(css)= self.compute_css(name) { out.push(css); } }
+        // First pass: detect standalone animation chains spread across multiple classes on the same element.
+        // Pattern: animate:duration[:delay] + optional forwards + from(...), to(...), via(...)
+        // We consolidate these into a single CSS output (keyframes + animation rule) and skip
+        // emitting individual stage utilities (which are intentionally suppressed elsewhere).
+        use std::collections::{HashMap, HashSet};
+        let mut consumed: HashSet<&str> = HashSet::new();
+        let mut out: Vec<String> = Vec::with_capacity(class_names.len());
+
+        // Collect stage classes for quick lookup grouped by simple tag (from/to/via) -> tokens inside parens.
+        // Multiple from/to/via of same type are preserved order of appearance.
+        let mut index_map: HashMap<&str, usize> = HashMap::new();
+        for (i, &c) in class_names.iter().enumerate() { index_map.insert(c, i); }
+
+        // Build a list so we iterate animate utilities in source order.
+        for &name in class_names {
+            if !name.starts_with("animate:") { continue; }
+            if consumed.contains(name) { continue; }
+            // Parse duration and optional delay
+            let rest = &name[8..];
+            let mut parts = rest.split(':');
+            let first_segment = parts.next().unwrap_or("1s").trim();
+            let duration = first_segment; // may be like "1s" only
+            let delay = parts.next().unwrap_or("0s").trim();
+            // If this single class includes embedded stages (contains space + from()/to()/via()) parse inline.
+            let mut inline_from: Vec<String> = Vec::new();
+            let mut inline_to: Vec<String> = Vec::new();
+            let mut inline_via: Vec<Vec<String>> = Vec::new();
+            let mut inline_fill: Option<&str> = None;
+            if name.contains(' ') {
+                for token in name.split_whitespace().skip(1) { // skip animate: part token (which itself may include rest?)
+                    if token == "forwards" { inline_fill = Some("forwards"); continue; }
+                    if let Some(inner) = token.strip_prefix("from(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_from.push(body.replace(' ', "+")); } continue; } }
+                    if let Some(inner) = token.strip_prefix("to(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_to.push(body.replace(' ', "+")); } continue; } }
+                    if let Some(inner) = token.strip_prefix("via(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_via.push(vec![body.replace(' ', "+" )]); } continue; } }
+                }
+            }
+            // Scan sibling classes for stages and fill mode.
+            let mut from_tokens: Vec<String> = Vec::new();
+            let mut to_tokens: Vec<String> = Vec::new();
+            let mut via_groups: Vec<Vec<String>> = Vec::new();
+            let mut fill_mode: Option<&str> = None;
+            for &other in class_names {
+                if other == name { continue; }
+                if other == "forwards" { fill_mode = Some("forwards"); consumed.insert(other); continue; }
+                // Match from(...), to(...), via(...)
+                if let Some(inner) = other.strip_prefix("from(") { if let Some(body) = inner.strip_suffix(')') {
+                    let toks = body.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>();
+                    if !toks.is_empty() { from_tokens.push(toks.join("+")); }
+                    consumed.insert(other); continue;
+                }}
+                if let Some(inner) = other.strip_prefix("to(") { if let Some(body) = inner.strip_suffix(')') {
+                    let toks = body.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>();
+                    if !toks.is_empty() { to_tokens.push(toks.join("+")); }
+                    consumed.insert(other); continue;
+                }}
+                if let Some(inner) = other.strip_prefix("via(") { if let Some(body) = inner.strip_suffix(')') {
+                    let toks = body.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>();
+                    if !toks.is_empty() { via_groups.push(vec![toks.join("+" )]); }
+                    consumed.insert(other); continue;
+                }}
+            }
+            // Merge inline parsed stages (if any) before evaluating emptiness
+            if !inline_from.is_empty() || !inline_to.is_empty() || !inline_via.is_empty() || inline_fill.is_some() {
+                from_tokens.extend(inline_from);
+                to_tokens.extend(inline_to);
+                via_groups.extend(inline_via);
+                if inline_fill.is_some() { fill_mode = inline_fill; }
+            }
+            if from_tokens.is_empty() && to_tokens.is_empty() && via_groups.is_empty() {
+                // Fallback to existing compute path (will currently produce nothing). Let compute_css handle it.
+                if let Some(css) = self.compute_css(name) { out.push(css); }
+                continue;
+            }
+            consumed.insert(name);
+            // Build encoded animation lines
+            let mut encoded_lines: Vec<String> = Vec::new();
+            encoded_lines.push(format!("ANIM|animate|{}|{}", duration, delay));
+            if let Some(f) = fill_mode { encoded_lines.push(format!("ANIM|fill|{}", f)); }
+            for ft in &from_tokens { encoded_lines.push(format!("ANIM|from|{}", ft)); }
+            for tg in &to_tokens { encoded_lines.push(format!("ANIM|to|{}", tg)); }
+            for vg in &via_groups { for v in vg { encoded_lines.push(format!("ANIM|via|{}", v)); } }
+            let encoded_css = encoded_lines.join("\n");
+            // Escape selector same way compute_css does.
+            let mut escaped_ident = String::with_capacity(name.len() + 8);
+            struct Acc<'a> { buf: &'a mut String }
+            impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s:&str)->fmt::Result { self.buf.push_str(s); Ok(()) } }
+            if serialize_identifier(name, &mut Acc { buf: &mut escaped_ident }).is_err() {
+                for ch in name.chars() { match ch { ':'=>escaped_ident.push_str("\\:"), '@'=>escaped_ident.push_str("\\@"), '('=>escaped_ident.push_str("\\("), ')'=>escaped_ident.push_str("\\)"), ' '=>escaped_ident.push_str("\\ "), '/' => escaped_ident.push_str("\\/"), '\\'=>escaped_ident.push_str("\\\\"), _=>escaped_ident.push(ch) } }
+            }
+            let selector = format!(".{}", escaped_ident);
+            let decoded = self.decode_encoded_css(&encoded_css, &selector, &[]);
+            out.push(decoded);
+        }
+
+        // Second pass: process remaining classes normally (skip those consumed as part of an animation chain or stage utilities)
+        for &name in class_names {
+            if consumed.contains(name) { continue; }
+            if name.starts_with("from(") || name.starts_with("to(") || name.starts_with("via(") || name == "forwards" { continue; }
+            if let Some(css) = self.compute_css(name) { out.push(css); }
+        }
         out
     }
 
@@ -711,14 +809,18 @@ impl StyleEngine {
             }
         }
         if let Some(pa) = pending_anim.take() {
-            // If no animate: utility was present (only stages), skip emitting keyframes/animation to avoid empty rulesets.
+            // If no animate: utility was present (only stages), skip emitting keyframes/animation.
             if !pa.has_main { if out.ends_with('\n') { out.pop(); } return out; }
-            // Consolidate frames into single keyframes per requirements.
-            let hash = format!("{:x}", seahash::hash(selector.as_bytes()));
+            // Derive base animate selector (first segment up to first escaped space).
+            let base_selector = if let Some(space_idx) = selector.find("\\ ") {
+                &selector[..space_idx]
+            } else { selector };
+            // Hash only the base selector so keyframe name stable across stage changes.
+            let hash = format!("{:x}", seahash::hash(base_selector.as_bytes()));
+            // Build frames
             let mut frames: Vec<(u32,String)> = Vec::new();
             if !pa.from.is_empty() { frames.push((0, self.resolve_animation_tokens(&pa.from))); }
             if !pa.to_.is_empty() { frames.push((100, self.resolve_animation_tokens(&pa.to_))); }
-            // Insert via stages evenly spaced if present
             if !pa.via.is_empty() {
                 let count = pa.via.len();
                 for (i, v) in pa.via.iter().enumerate() {
@@ -727,16 +829,21 @@ impl StyleEngine {
                 }
             }
             frames.sort_by_key(|(p, _)| *p);
-            let mut kf = String::new();
-            kf.push_str("@keyframes dx-anim-");
-            kf.push_str(&hash);
-            kf.push_str(" {\n");
-            for (pct, decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); }
-            kf.push_str("}\n\n");
-            out.push_str(&kf);
-            // Apply animation to the selector itself: animation: <duration> <delay> both dx-anim-hash
-            let fill = if pa.fill_mode.is_empty() { "both" } else { pa.fill_mode.as_str() };
-            out.push_str(&build_block(selector, &format!("animation: {} {} {} dx-anim-{}", pa.duration, pa.delay, fill, hash)));
+            // Only emit if we have at least one frame with declarations
+            let mut kf_body = String::new();
+            for (pct, decls) in &frames { if !decls.trim().is_empty() { kf_body.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); } }
+            if !kf_body.is_empty() {
+                out.push_str("@keyframes dx-anim-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
+                // Build animation shorthand: duration [delay] fillMode keyframesName
+                let mut parts: Vec<String> = Vec::new();
+                parts.push(pa.duration.clone());
+                if pa.delay != "0s" { parts.push(pa.delay.clone()); }
+                let fill = if pa.fill_mode.is_empty() { "both" } else { pa.fill_mode.as_str() };
+                parts.push(fill.to_string());
+                parts.push(format!("dx-anim-{}", hash));
+                let value = parts.join(" ");
+                out.push_str(&build_block(base_selector, &format!("animation: {}", value)));
+            }
         }
         if out.ends_with('\n') { out.pop(); }
         out
@@ -749,6 +856,10 @@ impl StyleEngine {
             for piece in t.split('+') {
                 let piece = piece.trim(); if piece.is_empty() { continue; }
                 if let Some(css) = self.precompiled.get(piece) { decls.push(css.clone()); continue; }
+                // Minimal built-in mappings for animation tokens when precompiled map lacks entries.
+                if let Some(rest) = piece.strip_prefix("opacity-") {
+                    if let Ok(num) = rest.parse::<u32>() { let val = if num >= 100 { "1".to_string() } else { format!("{}", (num as f32)/100.0) }; decls.push(format!("opacity: {}", val)); continue; }
+                }
                 if let Some(c) = self.generate_color_css(piece) { decls.push(c); continue; }
                 if let Some(d) = self.generate_dynamic_css(piece) { decls.push(d); continue; }
             }
