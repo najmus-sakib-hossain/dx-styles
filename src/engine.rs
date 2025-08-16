@@ -512,17 +512,19 @@ impl StyleEngine {
             let first_segment = parts.next().unwrap_or("1s").trim();
             let duration = first_segment; // may be like "1s" only
             let delay = parts.next().unwrap_or("0s").trim();
-            // If this single class includes embedded stages (contains space + from()/to()/via()) parse inline.
+            // If this single class includes embedded stages (contains spaces) parse inline.
             let mut inline_from: Vec<String> = Vec::new();
             let mut inline_to: Vec<String> = Vec::new();
             let mut inline_via: Vec<Vec<String>> = Vec::new();
             let mut inline_fill: Option<&str> = None;
+            // Base animate token (first whitespace-separated segment) for selector + hashing
+            let base_token = name.split_whitespace().next().unwrap_or(name);
             if name.contains(' ') {
-                for token in name.split_whitespace().skip(1) { // skip animate: part token (which itself may include rest?)
+                for token in name.split_whitespace().skip(1) {
                     if token == "forwards" { inline_fill = Some("forwards"); continue; }
-                    if let Some(inner) = token.strip_prefix("from(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_from.push(body.replace(' ', "+")); } continue; } }
-                    if let Some(inner) = token.strip_prefix("to(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_to.push(body.replace(' ', "+")); } continue; } }
-                    if let Some(inner) = token.strip_prefix("via(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_via.push(vec![body.replace(' ', "+" )]); } continue; } }
+                    if let Some(inner) = token.strip_prefix("from(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_from.push(body.split_whitespace().collect::<Vec<_>>().join("+")); } continue; } }
+                    if let Some(inner) = token.strip_prefix("to(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_to.push(body.split_whitespace().collect::<Vec<_>>().join("+")); } continue; } }
+                    if let Some(inner) = token.strip_prefix("via(") { if let Some(body) = inner.strip_suffix(')') { if !body.is_empty() { inline_via.push(vec![body.split_whitespace().collect::<Vec<_>>().join("+" )]); } continue; } }
                 }
             }
             // Scan sibling classes for stages and fill mode.
@@ -572,11 +574,11 @@ impl StyleEngine {
             for vg in &via_groups { for v in vg { encoded_lines.push(format!("ANIM|via|{}", v)); } }
             let encoded_css = encoded_lines.join("\n");
             // Escape selector same way compute_css does.
-            let mut escaped_ident = String::with_capacity(name.len() + 8);
+            let mut escaped_ident = String::with_capacity(base_token.len() + 8);
             struct Acc<'a> { buf: &'a mut String }
             impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s:&str)->fmt::Result { self.buf.push_str(s); Ok(()) } }
-            if serialize_identifier(name, &mut Acc { buf: &mut escaped_ident }).is_err() {
-                for ch in name.chars() { match ch { ':'=>escaped_ident.push_str("\\:"), '@'=>escaped_ident.push_str("\\@"), '('=>escaped_ident.push_str("\\("), ')'=>escaped_ident.push_str("\\)"), ' '=>escaped_ident.push_str("\\ "), '/' => escaped_ident.push_str("\\/"), '\\'=>escaped_ident.push_str("\\\\"), _=>escaped_ident.push(ch) } }
+            if serialize_identifier(base_token, &mut Acc { buf: &mut escaped_ident }).is_err() {
+                for ch in base_token.chars() { match ch { ':'=>escaped_ident.push_str("\\:"), '@'=>escaped_ident.push_str("\\@"), '('=>escaped_ident.push_str("\\("), ')'=>escaped_ident.push_str("\\)"), ' '=>escaped_ident.push_str("\\ "), '/' => escaped_ident.push_str("\\/"), '\\'=>escaped_ident.push_str("\\\\"), _=>escaped_ident.push(ch) } }
             }
             let selector = format!(".{}", escaped_ident);
             let decoded = self.decode_encoded_css(&encoded_css, &selector, &[]);
