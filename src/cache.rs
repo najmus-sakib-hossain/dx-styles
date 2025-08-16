@@ -1,8 +1,8 @@
 use crate::parser::parse_classnames;
 use bincode::{
+    Decode, Encode,
     config::standard,
     error::{DecodeError, EncodeError},
-    Decode, Encode,
 };
 use serde::{Deserialize, Serialize};
 use sled::Db;
@@ -135,10 +135,7 @@ impl ClassnameCache {
     }
 
     #[allow(dead_code)]
-    pub fn compare_and_generate(
-        &self,
-        path: &Path,
-    ) -> Result<Option<HashSet<String>>, CacheError> {
+    pub fn compare_and_generate(&self, path: &Path) -> Result<Option<HashSet<String>>, CacheError> {
         if self.get(path)?.is_some() {
             return Ok(None);
         }

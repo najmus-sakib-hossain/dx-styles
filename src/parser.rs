@@ -96,7 +96,7 @@ impl ClassNameVisitor {
         };
         let mut i = 0usize;
         let bytes = raw.as_bytes();
-        let mut animate_mode = false; // inside animate chain (animate:... followed by from()/to()/via()/forwards)
+        let mut animate_mode = false;
         let mut animate_group_start: Option<usize> = None;
         while i < bytes.len() {
             while i < bytes.len() && bytes[i].is_ascii_whitespace() {
@@ -323,15 +323,16 @@ impl ClassNameVisitor {
                             colors.push(buf.trim().to_string());
                         }
                         if !colors.is_empty() {
-                            c.base
-                                .push(format!("gradient:mesh:{}", colors.join("+")));
+                            c.base.push(format!("gradient:mesh:{}", colors.join("+")));
                         }
                     }
                 } else if ident == "transition" {
-                    // Treat transition(duration) as a simple standalone utility token.
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
-                        let duration = inner_tokens.get(0).cloned().unwrap_or_else(|| "150ms".to_string());
+                        let duration = inner_tokens
+                            .get(0)
+                            .cloned()
+                            .unwrap_or_else(|| "150ms".to_string());
                         c.base.push(format!("transition({})", duration));
                     }
                 } else if ident.starts_with('$') {
@@ -443,8 +444,7 @@ impl ClassNameVisitor {
                     if let Some(c) = &mut pending {
                         c.base.push("animfill:forwards".to_string());
                     }
-                    if animate_mode { /* still inside animate chain */
-                    }
+                    if animate_mode { /* still inside animate chain */ }
                 } else if let Some(list) = self.components.get(ident) {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
@@ -519,7 +519,6 @@ impl ClassNameVisitor {
             }
         }
         if let Some(c) = pending {
-            // finalize trailing
             if !c.animations.is_empty() {
                 let slice_start = animate_group_start.unwrap_or(0);
                 let class_name = composites::register_grouping_raw(raw[slice_start..].trim(), c);

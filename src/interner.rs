@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use cssparser::serialize_identifier;
+use std::collections::HashMap;
 use std::fmt;
 
 pub struct ClassInterner {
@@ -11,25 +11,30 @@ pub struct ClassInterner {
 #[allow(dead_code)]
 impl ClassInterner {
     pub fn new() -> Self {
-        Self { map: HashMap::new(), strings: Vec::new(), escaped: Vec::new() }
+        Self {
+            map: HashMap::new(),
+            strings: Vec::new(),
+            escaped: Vec::new(),
+        }
     }
 
     #[inline]
     pub fn intern(&mut self, s: &str) -> u32 {
-        if let Some(&id) = self.map.get(s) { return id; }
+        if let Some(&id) = self.map.get(s) {
+            return id;
+        }
         let id = self.strings.len() as u32;
         self.strings.push(s.to_string());
-
-        // Use cssparser's identifier serializer to robustly escape the class name so
-        // the generated selector matches the original literal in TSX (after CSS escaping)
-        // without us heuristically deciding which chars to escape. This ensures spaces,
-        // punctuation, leading digits, etc. are all handled per the CSS spec.
         let mut escaped = String::with_capacity(s.len() + 8);
-        // cssparser::serialize_identifier writes only the identifier itself (no leading '.')
-        // and guarantees a valid CSS ident that represents the same string.
-        // If serialization fails (shouldn't), we fallback.
-        struct Acc<'a> { buf: &'a mut String }
-        impl<'a> fmt::Write for Acc<'a> { fn write_str(&mut self, s: &str) -> fmt::Result { self.buf.push_str(s); Ok(()) } }
+        struct Acc<'a> {
+            buf: &'a mut String,
+        }
+        impl<'a> fmt::Write for Acc<'a> {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                self.buf.push_str(s);
+                Ok(())
+            }
+        }
         let serialize_result = {
             let mut acc = Acc { buf: &mut escaped };
             serialize_identifier(s, &mut acc)
@@ -55,10 +60,16 @@ impl ClassInterner {
     }
 
     #[inline]
-    pub fn get(&self, id: u32) -> &str { &self.strings[id as usize] }
+    pub fn get(&self, id: u32) -> &str {
+        &self.strings[id as usize]
+    }
 
     #[inline]
-    pub fn escaped(&self, id: u32) -> &str { &self.escaped[id as usize] }
+    pub fn escaped(&self, id: u32) -> &str {
+        &self.escaped[id as usize]
+    }
 
-    pub fn len(&self) -> usize { self.strings.len() }
+    pub fn len(&self) -> usize {
+        self.strings.len()
+    }
 }

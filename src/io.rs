@@ -4,13 +4,15 @@ use std::io::{self, BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use libc::{cpu_set_t, sched_setaffinity, CPU_SET};
+use libc::{CPU_SET, cpu_set_t, sched_setaffinity};
 use rayon::prelude::*;
 use sysinfo::System;
 
 const NUM_FILES: usize = 10000;
-const CONTENT: &[u8] = b"initial content padded to simulate dx-check workload....................100 bytes..";
-const UPDATE_CONTENT: &[u8] = b"updated content padded to simulate dx-check workload....................100 bytes..";
+const CONTENT: &[u8] =
+    b"initial content padded to simulate dx-check workload....................100 bytes..";
+const UPDATE_CONTENT: &[u8] =
+    b"updated content padded to simulate dx-check workload....................100 bytes..";
 
 fn get_dynamic_batch_size() -> usize {
     const MEMORY_USAGE_FACTOR: f64 = 0.25;
@@ -51,7 +53,9 @@ fn pin_thread(core_id: usize) -> io::Result<()> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn pin_thread(_core_id: usize) -> io::Result<()> { Ok(()) }
+fn pin_thread(_core_id: usize) -> io::Result<()> {
+    Ok(())
+}
 
 #[allow(dead_code)]
 fn run_in_pinned_pool<F>(benchmark_fn: F) -> io::Result<()>

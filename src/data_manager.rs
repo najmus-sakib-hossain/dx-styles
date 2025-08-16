@@ -10,7 +10,10 @@ pub fn update_class_maps(
     global_classnames: &mut HashSet<String>,
 ) -> (usize, usize, usize, usize, Vec<String>, Vec<String>) {
     let old_classnames = file_classnames.get(path).cloned().unwrap_or_default();
-    let added_in_file: HashSet<_> = new_classnames.difference(&old_classnames).cloned().collect();
+    let added_in_file: HashSet<_> = new_classnames
+        .difference(&old_classnames)
+        .cloned()
+        .collect();
     let removed_in_file: HashSet<_> = old_classnames.difference(new_classnames).cloned().collect();
 
     let mut added_in_global = 0;

@@ -1,5 +1,6 @@
 use crate::{
-    cache::ClassnameCache, data_manager, engine::StyleEngine, generator, parser, utils, interner::ClassInterner,
+    cache::ClassnameCache, data_manager, engine::StyleEngine, generator, interner::ClassInterner,
+    parser, utils,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -7,7 +8,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-// Handle a file add or modify: parse, update maps, regenerate full CSS if any change
 pub fn process_file_change(
     cache: &ClassnameCache,
     path: &Path,
@@ -24,7 +24,14 @@ pub fn process_file_change(
     let parse_duration = parse_start.elapsed();
 
     let update_maps_start = Instant::now();
-    let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps_ids(
+    let (
+        added_file,
+        removed_file,
+        added_global,
+        removed_global,
+        _added_globals_vec,
+        _removed_globals_vec,
+    ) = data_manager::update_class_maps_ids(
         path,
         &class_ids,
         file_classnames_ids,
@@ -33,16 +40,21 @@ pub fn process_file_change(
     );
     let update_maps_duration = update_maps_start.elapsed();
 
-    // Always regenerate if anything changed at file or global level.
-    // Now we regenerate unconditionally so edits that don't alter class lists still refresh output.
     let generate_start = Instant::now();
-    generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
+    generator::generate_css_ids(
+        global_classnames_ids,
+        output_path,
+        style_engine,
+        interner,
+        false,
+    );
     let generate_css_duration = generate_start.elapsed();
 
-    // Persist updated per-file class set
     let cache_write_start = Instant::now();
     let mut back_to_strings: HashSet<String> = HashSet::new();
-    for id in &class_ids { back_to_strings.insert(interner.get(*id).to_string()); }
+    for id in &class_ids {
+        back_to_strings.insert(interner.get(*id).to_string());
+    }
     let _ = cache.set(path, &back_to_strings);
     let cache_write = cache_write_start.elapsed();
 
@@ -66,12 +78,10 @@ pub fn process_file_change(
             timings,
         );
     } else {
-        // Still provide a lightweight notice so user sees that watcher reacted.
         println!("✓ {} (no class changes)", path.display());
     }
 }
 
-// Handle a file removal: update maps, regenerate if global set changed, remove cache entry
 pub fn process_file_remove(
     cache: &ClassnameCache,
     path: &Path,
@@ -85,7 +95,14 @@ pub fn process_file_remove(
     let total_start = Instant::now();
     let update_maps_start = Instant::now();
     let empty: HashSet<u32> = HashSet::new();
-    let (added_file, removed_file, added_global, removed_global, _added_globals_vec, _removed_globals_vec) = data_manager::update_class_maps_ids(
+    let (
+        added_file,
+        removed_file,
+        added_global,
+        removed_global,
+        _added_globals_vec,
+        _removed_globals_vec,
+    ) = data_manager::update_class_maps_ids(
         path,
         &empty,
         file_classnames_ids,
@@ -97,7 +114,13 @@ pub fn process_file_remove(
     let mut generate_css_duration = Duration::new(0, 0);
     if added_file > 0 || removed_file > 0 || added_global > 0 || removed_global > 0 {
         let generate_start = Instant::now();
-        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
+        generator::generate_css_ids(
+            global_classnames_ids,
+            output_path,
+            style_engine,
+            interner,
+            false,
+        );
         generate_css_duration = generate_start.elapsed();
     }
 

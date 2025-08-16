@@ -1,8 +1,8 @@
 use colored::Colorize;
+use std::fs::OpenOptions;
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use std::io::{self, BufWriter, Write};
-use std::fs::OpenOptions;
 use walkdir::WalkDir;
 
 pub struct ChangeTimings {
@@ -18,12 +18,20 @@ pub fn find_code_files(dir: &Path) -> Vec<PathBuf> {
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| is_code_file(e.path()))
-        .map(|e| e.path().canonicalize().unwrap_or_else(|_| e.path().to_path_buf()))
+        .map(|e| {
+            e.path()
+                .canonicalize()
+                .unwrap_or_else(|_| e.path().to_path_buf())
+        })
         .collect()
 }
 
 pub fn write_buffered(path: &Path, data: &[u8]) -> io::Result<()> {
-    let file = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(data)?;
     writer.flush()?;

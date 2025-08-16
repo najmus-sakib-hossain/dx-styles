@@ -1,12 +1,12 @@
 mod cache;
+mod composites;
 mod data_manager;
 mod engine;
 mod generator;
+mod interner;
 mod parser;
 mod utils;
 mod watcher;
-mod interner;
-mod composites;
 
 use crate::cache::ClassnameCache;
 use colored::Colorize;
@@ -26,7 +26,10 @@ fn main() {
     let styles_bin_path = PathBuf::from(".dx/styles.bin");
 
     if !styles_toml_path.exists() {
-        println!("{}", "i styles.toml not found, creating a default for you...".yellow());
+        println!(
+            "{}",
+            "i styles.toml not found, creating a default for you...".yellow()
+        );
         fs::write(
             &styles_toml_path,
             r#"[static]
@@ -37,7 +40,10 @@ fn main() {
             eprintln!("Failed to create styles.toml: {}", e);
             e
         })
-        .and_then(|_| crate::utils::write_buffered(&styles_toml_path, b"[static]\n[dynamic]\n[generators]\n")).expect("Failed to create styles.toml!");
+        .and_then(|_| {
+            crate::utils::write_buffered(&styles_toml_path, b"[static]\n[dynamic]\n[generators]\n")
+        })
+        .expect("Failed to create styles.toml!");
     }
 
     if !styles_bin_path.exists() {
@@ -71,9 +77,6 @@ fn main() {
         }
     };
 
-    // Always work with canonical paths so that initial scan entries and watcher
-    // events use identical keys. Mismatched canonical vs relative paths can
-    // prevent change detection (e.g. edits to page.tsx not updating CSS).
     let output_file = PathBuf::from("playgrounds/nextjs/app/globals.css")
         .canonicalize()
         .unwrap_or_else(|_| PathBuf::from("playgrounds/nextjs/app/globals.css"));
@@ -137,29 +140,40 @@ fn main() {
         }
 
         for file in files {
-            match cache.get(&file) { _ => {
-                let ids = parser::parse_classnames_ids(&file, &mut interner);
-                let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps_ids(
-                    &file,
-                    &ids,
-                    &mut file_classnames_ids,
-                    &mut classname_counts_ids,
-                    &mut global_classnames_ids,
-                );
-                let mut back_to_strings: HashSet<String> = HashSet::new();
-                for id in &ids { back_to_strings.insert(interner.get(*id).to_string()); }
-                let _ = cache.set(&file, &back_to_strings);
-                total_added_in_files += a_f;
-                total_removed_in_files += r_f;
-                total_added_global += a_g;
-                total_removed_global += r_g;
-            }}
+            match cache.get(&file) {
+                _ => {
+                    let ids = parser::parse_classnames_ids(&file, &mut interner);
+                    let (a_f, r_f, a_g, r_g, _ag, _rg) = data_manager::update_class_maps_ids(
+                        &file,
+                        &ids,
+                        &mut file_classnames_ids,
+                        &mut classname_counts_ids,
+                        &mut global_classnames_ids,
+                    );
+                    let mut back_to_strings: HashSet<String> = HashSet::new();
+                    for id in &ids {
+                        back_to_strings.insert(interner.get(*id).to_string());
+                    }
+                    let _ = cache.set(&file, &back_to_strings);
+                    total_added_in_files += a_f;
+                    total_removed_in_files += r_f;
+                    total_added_global += a_g;
+                    total_removed_global += r_g;
+                }
+            }
         }
 
-        let should_regen = (total_added_global > 0 || total_removed_global > 0) || !global_classnames_ids.is_empty();
+        let should_regen = (total_added_global > 0 || total_removed_global > 0)
+            || !global_classnames_ids.is_empty();
         if should_regen {
             let generate_start = Instant::now();
-            generator::generate_css_ids(&global_classnames_ids, &output_file, &style_engine, &interner, true);
+            generator::generate_css_ids(
+                &global_classnames_ids,
+                &output_file,
+                &style_engine,
+                &interner,
+                true,
+            );
             style_engine.prewarm(&interner);
             let generate_duration = generate_start.elapsed();
             let total_duration = scan_start.elapsed();
@@ -194,7 +208,9 @@ fn main() {
     println!(
         "{} {}",
         "▲".bold().green(),
-        "Dx Styles is now watching for file changes...".bold().green()
+        "Dx Styles is now watching for file changes..."
+            .bold()
+            .green()
     );
 
     let (tx, rx) = mpsc::channel();
@@ -208,11 +224,12 @@ fn main() {
         match res {
             Ok(events) => {
                 for event in events {
-                    if matches!(event.kind, notify::event::EventKind::Access(_)) { continue; }
+                    if matches!(event.kind, notify::event::EventKind::Access(_)) {
+                        continue;
+                    }
                     for raw_path in &event.paths {
                         let path = raw_path.canonicalize().unwrap_or_else(|_| raw_path.clone());
                         if utils::is_code_file(&path) && path != output_file {
-                            // println!("watch: {:?} -> {:?}", event.kind, path.display());
                             if matches!(event.kind, notify::event::EventKind::Remove(_)) {
                                 watcher::process_file_remove(
                                     &cache,
