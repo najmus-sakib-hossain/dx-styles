@@ -623,8 +623,17 @@ impl StyleEngine {
             if !vias.is_empty() { let count = vias.len(); for (i,v) in vias.iter().enumerate() { let pct = ((i+1) as f32)/((count+1) as f32)*100.0; frames.push((pct as u32, resolve_util_list(v))); } }
             if !tos.is_empty() { frames.push((100, resolve_util_list(&tos.join("+")))); }
             frames.sort_by_key(|(p,_)| *p);
-            let mut kf = String::new(); kf.push_str("@keyframes "); kf.push_str(&name); kf.push_str(" {\n"); for (pct,decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); } kf.push_str("}\n"); out.push_str(&kf);
-            out.push_str(&build_block(selector, &format!("animation: {} 1s both", name))); out.push('\n');
+            let mut kf = String::new();
+            kf.push_str("@keyframes ");
+            kf.push_str(&name);
+            kf.push_str(" {\n");
+            for (pct,decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); }
+            kf.push_str("}\n");
+            out.push_str(&kf);
+            // Ensure a blank line (two consecutive newlines total) between keyframes and the animation usage block.
+            if !out.ends_with("\n\n") { out.push('\n'); }
+            out.push_str(&build_block(selector, &format!("animation: {} 1s both", name)));
+            out.push('\n');
         }
         if out.ends_with('\n') { out.pop(); }
         out
