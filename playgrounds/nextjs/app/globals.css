@@ -115,7 +115,7 @@
 }
 
 .transition\(500ms\) {
-  padding: 1.5rem;
+  padding: 2.5rem;
   background-color: oklch(0.627 0.265 303.9);
   border-radius: 0.5rem;
   width: 8rem;
@@ -145,7 +145,7 @@
 }
 
 @media (min-width: 1024px) {
-  .lg\(p-13\) {
-    padding: 3.25rem;
+  .lg\(p-69\) {
+    padding: 17.25rem;
   }
 }

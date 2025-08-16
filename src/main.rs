@@ -71,7 +71,12 @@ fn main() {
         }
     };
 
-    let output_file = PathBuf::from("playgrounds/nextjs/app/globals.css");
+    // Always work with canonical paths so that initial scan entries and watcher
+    // events use identical keys. Mismatched canonical vs relative paths can
+    // prevent change detection (e.g. edits to page.tsx not updating CSS).
+    let output_file = PathBuf::from("playgrounds/nextjs/app/globals.css")
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from("playgrounds/nextjs/app/globals.css"));
     let cache = match ClassnameCache::new(".dx/cache") {
         Ok(c) => c,
         Err(e) => {
@@ -80,6 +85,7 @@ fn main() {
         }
     };
     let dir = PathBuf::from("playgrounds/nextjs");
+    let dir_canonical = dir.canonicalize().unwrap_or_else(|_| dir.clone());
 
     let mut interner = interner::ClassInterner::new();
     let mut file_classnames_ids: HashMap<PathBuf, HashSet<u32>> = HashMap::new();
@@ -98,7 +104,7 @@ fn main() {
     }
 
     let scan_start = Instant::now();
-    let files = utils::find_code_files(&dir);
+    let files = utils::find_code_files(&dir_canonical);
     if !files.is_empty() {
         let file_set: HashSet<PathBuf> = files.iter().cloned().collect();
 
@@ -169,7 +175,7 @@ fn main() {
 
             utils::log_change(
                 "■",
-                &dir,
+                &dir_canonical,
                 total_added_in_files,
                 total_removed_in_files,
                 &output_file,
@@ -195,19 +201,22 @@ fn main() {
     let mut watcher =
         new_debouncer(Duration::from_millis(50), None, tx).expect("Failed to create watcher");
     watcher
-        .watch(&dir, RecursiveMode::Recursive)
+        .watch(&dir_canonical, RecursiveMode::Recursive)
         .expect("Failed to start watcher");
 
     for res in rx {
         match res {
             Ok(events) => {
                 for event in events {
-                    for path in &event.paths {
-                        if utils::is_code_file(path) && *path != output_file {
+                    if matches!(event.kind, notify::event::EventKind::Access(_)) { continue; }
+                    for raw_path in &event.paths {
+                        let path = raw_path.canonicalize().unwrap_or_else(|_| raw_path.clone());
+                        if utils::is_code_file(&path) && path != output_file {
+                            // println!("watch: {:?} -> {:?}", event.kind, path.display());
                             if matches!(event.kind, notify::event::EventKind::Remove(_)) {
                                 watcher::process_file_remove(
                                     &cache,
-                                    path,
+                                    &path,
                                     &mut file_classnames_ids,
                                     &mut classname_counts_ids,
                                     &mut global_classnames_ids,
@@ -218,7 +227,7 @@ fn main() {
                             } else {
                                 watcher::process_file_change(
                                     &cache,
-                                    path,
+                                    &path,
                                     &mut file_classnames_ids,
                                     &mut classname_counts_ids,
                                     &mut global_classnames_ids,

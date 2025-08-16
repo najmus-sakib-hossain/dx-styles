@@ -3,7 +3,7 @@ export default function Home() {
     <main
       className="
         bg-yellow-500 min-h-screen w-screen p-10 text-white-800
-        lg(p-13)
+        lg(p-69)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)
         animate:1s from(opacity-0) to(opacity-100) forwards
@@ -63,7 +63,7 @@ export default function Home() {
           <div>
             <h3 className="font-semibold">Physics Motion</h3>
             <div className="
-              p-6 bg-purple-500 text-white rounded-lg w-32 text-center
+              p-10 bg-purple-500 text-white rounded-lg w-32 text-center
               transition(500ms)
               hover(scale-110 rotate-[-5deg])
               motion(mass:1 stiffness:180 damping:12)
@@ -78,7 +78,7 @@ export default function Home() {
             <input
               type="text"
               placeholder="Focus me"
-              className="p-69 border rounded-lg focus($focus-ring)"
+              className="p-20 border rounded-lg focus($focus-ring)"
             />
           </div>
         </div>
