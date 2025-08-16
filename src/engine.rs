@@ -19,6 +19,15 @@ mod styles_generated {
 use styles_generated::style_schema;
 use crate::composites;
 
+#[derive(Default)]
+struct PendingAnimation {
+    duration: String,
+    delay: String,
+    from: Vec<String>,
+    via: Vec<String>,
+    to_: Vec<String>,
+}
+
 pub struct StyleEngine {
     precompiled: HashMap<String, String>,
     buffer: Vec<u8>,
@@ -464,6 +473,14 @@ impl StyleEngine {
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {
+        // Special meta utility: transition(<duration>) sets standard transition props.
+        if let Some(arg) = class_name.strip_prefix("transition(") {
+            if let Some(end) = arg.find(')') {
+                let dur = &arg[..end];
+                let duration = if dur.is_empty() { "150ms" } else { dur };
+                return Some(format!("transition-property: all; transition-duration: {}; transition-timing-function: cubic-bezier(0.4,0,0.2,1)", duration));
+            }
+        }
         let config = flatbuffers::root::<style_schema::Config>(&self.buffer).ok()?;
         if let Some(generators) = config.generators() {
             for generator in generators {
@@ -544,14 +561,17 @@ impl StyleEngine {
             return out;
         }
         let mut out = String::new();
+        let mut pending_anim: Option<PendingAnimation> = None;
         let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css] };
-        let mut anim_stage_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
         for line in lines {
             if line.is_empty() { continue; }
             if let Some(rest) = line.strip_prefix("BASE|") {
-                if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
-                else { for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, rest)); out.push('\n'); } if out.ends_with('\n') { out.pop(); } }
-                out.push('\n');
+                // Suppress base for responsive group selectors like .lg\(
+                if !(selector.contains(".lg\\(") || selector.contains(".sm\\(") || selector.contains(".md\\(") || selector.contains(".xl\\(")) {
+                    if wrappers.is_empty() { out.push_str(&build_block(selector, rest)); }
+                    else { for w in wrappers { let sel = w.replace('&', selector); out.push_str(&build_block(&sel, rest)); out.push('\n'); } if out.ends_with('\n') { out.pop(); } }
+                    out.push('\n');
+                }
             } else if let Some(rest) = line.strip_prefix("STATE|") {
                 let mut parts = rest.splitn(2,'|'); let state = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
                 if state == "dark" { out.push_str(&build_block(&format!(".dark {}", selector), decls)); }
@@ -567,73 +587,50 @@ impl StyleEngine {
             } else if let Some(rest) = line.strip_prefix("COND|") {
                 let mut parts = rest.splitn(2,'|'); let cond = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
                 if let Some(val) = cond.strip_prefix("@container>") {
-                    let inner = build_block(selector, decls);
-                    let inner_trimmed = inner.trim_end();
+                    // Single grouped selector within container
                     out.push_str(&format!("@container (min-width: {}) {{\n", val));
-                    for l in inner_trimmed.lines() {
-                        out.push_str("  ");
-                        out.push_str(l);
-                        out.push('\n');
-                    }
+                    for l in build_block(selector, decls).lines() { out.push_str("  "); out.push_str(l); out.push('\n'); }
                     out.push_str("}\n");
-                }
-                else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) {
-                    let inner = build_block(selector, decls);
-                    let inner_trimmed = inner.trim_end();
+                } else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) {
                     out.push_str(&format!("@media (min-width: {}) {{\n", v));
-                    for l in inner_trimmed.lines() {
-                        out.push_str("  ");
-                        out.push_str(l);
-                        out.push('\n');
-                    }
+                    for l in build_block(selector, decls).lines() { out.push_str("  "); out.push_str(l); out.push('\n'); }
                     out.push_str("}\n");
-                } }
-                else if let Some(rest) = cond.strip_prefix("self:child-count>") {
+                }} else if let Some(rest) = cond.strip_prefix("self:child-count>") {
                     if let Ok(threshold) = rest.parse::<usize>() {
-                        if threshold > 0 {
-                            let hashed = format!("{}:has(> :nth-last-child(n+{}):first-child)", selector, threshold);
-                            out.push_str(&build_block(&hashed, decls)); out.push('\n');
-                        } else {
-                            out.push_str(&build_block(selector, decls)); out.push('\n');
-                        }
+                        if threshold > 0 { let hashed = format!("{}:has(> :nth-last-child(n+{}):first-child)", selector, threshold); out.push_str(&build_block(&hashed, decls)); out.push('\n'); }
+                        else { out.push_str(&build_block(selector, decls)); out.push('\n'); }
                     }
                 }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
-                let spec = rest; let parts: Vec<&str> = spec.split('|').collect();
-                if parts.len() >= 3 && parts[0] == "animstage" {
-                    let anim_name = format!("dx-keyframe-{:x}", seahash::hash(selector.as_bytes()));
-                    let stage = parts[1].to_string();
-                    let toks = parts[2].to_string();
-                    anim_stage_map.entry(anim_name).or_default().push((stage, toks));
+                // Formats: animate|duration|delay OR stage|from|decls / stage|to|decls / stage|via|decls
+                let parts: Vec<&str> = rest.split('|').collect();
+                if parts.get(0)==Some(&"animate") {
+                    let duration_val = parts.get(1).copied().unwrap_or("1s").to_string();
+                    let delay_val = parts.get(2).copied().unwrap_or("0s").to_string();
+                    let pa = pending_anim.get_or_insert(PendingAnimation{ duration: duration_val.clone(), delay: delay_val.clone(), from:Vec::new(), via:Vec::new(), to_:Vec::new() });
+                    pa.duration = duration_val; pa.delay = delay_val;
+                } else if parts.len() >= 2 {
+                    let stage = parts[0];
+                    let decls = parts[1];
+                    let pa = pending_anim.get_or_insert(PendingAnimation{ duration: "1s".into(), delay: "0s".into(), from:Vec::new(), via:Vec::new(), to_:Vec::new() });
+                    match stage { "from" => pa.from.push(decls.to_string()), "to" => pa.to_.push(decls.to_string()), "via" => pa.via.push(decls.to_string()), _=>{} }
                 }
             } else if let Some(raw) = line.strip_prefix("RAW|") {
                 out.push_str(raw); if !raw.ends_with('\n') { out.push('\n'); }
             }
         }
-        for (name, mut stages) in anim_stage_map.into_iter() {
-            let mut froms = Vec::new(); let mut vias = Vec::new(); let mut tos = Vec::new();
-            for (stage, toks) in stages.drain(..) { match stage.as_str() { "from" => froms.push(toks), "via" => vias.push(toks), "to" => tos.push(toks), _ => {} } }
-            let resolve_util_list = |raw: &str| -> String {
-                let mut decls: Vec<String> = Vec::new();
-                for ut in raw.split('+') { let u=ut.trim(); if u.is_empty(){continue;} if let Some(rule)=self.precompiled.get(u){decls.push(rule.clone());} else if let Some(c)=self.generate_color_css(u){decls.push(c);} else if let Some(d)=self.generate_dynamic_css(u){decls.push(d);} }
-                decls.join("; ")
-            };
+        if let Some(pa) = pending_anim.take() {
+            // Consolidate frames
+            let hash = format!("{:x}", seahash::hash(selector.as_bytes()));
             let mut frames: Vec<(u32,String)> = Vec::new();
-            if !froms.is_empty() { frames.push((0, resolve_util_list(&froms.join("+")))); }
-            if !vias.is_empty() { let count = vias.len(); for (i,v) in vias.iter().enumerate() { let pct = ((i+1) as f32)/((count+1) as f32)*100.0; frames.push((pct as u32, resolve_util_list(v))); } }
-            if !tos.is_empty() { frames.push((100, resolve_util_list(&tos.join("+")))); }
+            if !pa.from.is_empty() { frames.push((0, pa.from.join("; "))); }
+            if !pa.via.is_empty() { let count = pa.via.len(); for (i,v) in pa.via.iter().enumerate() { let pct = ((i+1) as f32)/((count+1) as f32)*100.0; frames.push((pct as u32, v.clone())); } }
+            if !pa.to_.is_empty() { frames.push((100, pa.to_.join("; "))); }
             frames.sort_by_key(|(p,_)| *p);
-            let mut kf = String::new();
-            kf.push_str("@keyframes ");
-            kf.push_str(&name);
-            kf.push_str(" {\n");
-            for (pct,decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); }
-            kf.push_str("}\n");
-            out.push_str(&kf);
-            // Ensure a blank line (two consecutive newlines total) between keyframes and the animation usage block.
-            if !out.ends_with("\n\n") { out.push('\n'); }
-            out.push_str(&build_block(selector, &format!("animation: {} 1s both", name)));
-            out.push('\n');
+            let mut kf = String::new(); kf.push_str("@keyframes dx-keyframe-"); kf.push_str(&hash); kf.push_str(" {\n");
+            for (pct, decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); }
+            kf.push_str("}\n\n"); out.push_str(&kf);
+            out.push_str(&build_block(selector, &format!("animation: dx-keyframe-{} {} {} both", hash, pa.duration, pa.delay)));
         }
         if out.ends_with('\n') { out.pop(); }
         out

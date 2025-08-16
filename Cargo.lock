@@ -296,12 +296,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cssparser"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e901edd733a1472f944a45116df3f846f54d37e67e68640ac8bb69689aca2aa"
+dependencies = [
+ "cssparser-macros",
+ "dtoa-short",
+ "itoa",
+ "phf 0.11.3",
+ "smallvec",
+]
+
+[[package]]
 name = "cssparser-color"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "556c099a61d85989d7af52b692e35a8d68a57e7df8c6d07563dc0778b3960c9f"
 dependencies = [
- "cssparser",
+ "cssparser 0.33.0",
 ]
 
 [[package]]
@@ -365,6 +378,7 @@ dependencies = [
  "cc",
  "colored",
  "crossbeam-deque",
+ "cssparser 0.35.0",
  "flatbuffers",
  "flatc-rust",
  "futures",
@@ -721,7 +735,7 @@ dependencies = [
  "ahash 0.8.12",
  "bitflags 2.9.1",
  "const-str",
- "cssparser",
+ "cssparser 0.33.0",
  "cssparser-color",
  "dashmap",
  "data-encoding",
@@ -1139,7 +1153,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54fd03f1ad26cb6b3ec1b7414fa78a3bd639e7dbb421b1a60513c96ce886a196"
 dependencies = [
  "bitflags 2.9.1",
- "cssparser",
+ "cssparser 0.33.0",
  "log",
  "phf 0.11.3",
  "phf_codegen",

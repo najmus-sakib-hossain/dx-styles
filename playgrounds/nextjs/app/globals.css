@@ -1,15 +1,80 @@
+.transition {
+  transition-property: all;
+  transition-duration: 500ms;
+  transition-timing-function: cubic-bezier(0.4,0,0.2,1);
+}
+
+\~text\(2rem\@md,\ 3rem\@xl\) {
+  font-size: clamp(2rem, calc(2rem + 1 * (100vw - 768px) / (1280 - 768)), 3rem);
+}
+
+.max-w-full {
+  max-width: 100%;
+}
+
 .mb-4 {
   margin-bottom: 1rem;
 }
 
-.\*loading[data-loading] {
-  background-color: oklch(0.707 0.022 261.325);
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  cursor: wait;
+.container-type-inline-size {
+  container-type: inline-size;
+}
+
+@media (min-width: 1024px) {
+  .lg\(p-12\) {
+    padding: 3rem;
+  }
+}
+
+.from {
+  animation-name: dx-animation-name-782ee2f3ad223990;
+  animation-duration: 1s;
+  animation-delay: 0s;
+}
+
+@keyframes dx-keyframe-d1024f525bc3cc2d {
+}
+
+.from {
+  animation: dx-keyframe-d1024f525bc3cc2d 1s 0s both;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.card {
+  padding: 3.25rem;
+  backdrop-filter: blur(16px);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .mt-2 {
   margin-top: 0.5rem;
+}
+
+@container (min-width: 640px) {
+  .bg-green-200, .text-green-900 {
+    background-color: oklch(0.925 0.084 155.995);
+    color: oklch(0.393 0.095 152.535);
+  }
+}
+
+.div > div {
+  margin-top: 1rem;
+}
+
+.max-w-5xl {
+  max-width: 64rem;
+}
+
+.resize-x {
+  resize: horizontal;
 }
 
 .div > h1 {
@@ -18,6 +83,10 @@
 
 .div > p {
   margin-top: 0.5rem;
+}
+
+.font-bold {
+  font-weight: 700;
 }
 
 .text-xl {
@@ -31,72 +100,33 @@
   }
 }
 
-@keyframes dx-keyframe-32fe710ccbdda9c8 {
-  100% { opacity: 1 }
-}
-
-.to {
-  animation: dx-keyframe-32fe710ccbdda9c8 1s both;
-}
-
-@container (min-width: 640px) {
-  .bg-green-200, .text-green-900 {
-    background-color: oklch(0.925 0.084 155.995);
-    color: oklch(0.393 0.095 152.535);
-  }
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.div > div {
-  margin-top: 1rem;
-}
-
-.transition {
-  padding: 1.5rem;
-  background-color: oklch(0.627 0.265 303.9);
-  border-radius: 0.5rem;
-  width: 8rem;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-.font-bold {
-  font-weight: 700;
+.text-2xl {
+  font-size: 1.5rem;
 }
 
 .border-dashed {
   border-style: dashed;
 }
 
-\~text\(2rem\@md,\ 3rem\@xl\) {
-  font-size: clamp(2rem, calc(2rem + 1 * (100vw - 768px) / (1280 - 768)), 3rem);
+.mesh {
+  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
+  background-size: cover;
+  background-blend-mode: screen, lighten;
 }
 
-.from {
-  animation-name: dx-animation-name-782ee2f3ad223990;
-  animation-duration: 1s;
-  animation-delay: 0s;
+@keyframes dx-keyframe-32fe710ccbdda9c8 {
 }
 
-@keyframes dx-keyframe-d1024f525bc3cc2d {
-  0% { opacity: 0 }
-}
-
-.from {
-  animation: dx-keyframe-d1024f525bc3cc2d 1s both;
+.to {
+  animation: dx-keyframe-32fe710ccbdda9c8 1s 0s both;
 }
 
 .font-semibold {
   font-weight: 600;
 }
 
-.resize-x {
-  resize: horizontal;
+.w-full {
+  width: 100%;
 }
 
 ._highlight {
@@ -106,48 +136,14 @@
   color: oklch(0.379 0.146 265.522);
 }
 
-.max-w-5xl {
-  max-width: 64rem;
+.\*loading[data-loading] {
+  background-color: oklch(0.707 0.022 261.325);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  cursor: wait;
 }
 
-.overflow-auto {
-  overflow: auto;
-}
-
-.container-type-inline-size {
-  container-type: inline-size;
-}
-
-.w-full {
-  width: 100%;
-}
-
-.mesh {
-  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
-  background-size: cover;
-  background-blend-mode: screen, lighten;
-}
-
-.card {
-  padding: 3.25rem;
-  backdrop-filter: blur(16px);
-  border-radius: 0.75rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-.text-2xl {
-  font-size: 1.5rem;
-}
-
-.lg\(p-12\) {
-  background-color: oklch(0.795 0.184 86.047);
-  min-height: 100vh;
-  width: 100vw;
-  padding: 2.5rem;
-}
-
-@media (min-width: 1024px) {
-  .lg\(p-12\) {
-    padding: 3rem;
-  }
+.transition {
+  transition-property: all;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4,0,0.2,1);
 }
