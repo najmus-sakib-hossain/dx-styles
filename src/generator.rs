@@ -136,6 +136,32 @@ fn normalize_generated_css(css: &str) -> String {
     out
 }
 
+/// Extract a deterministic sort key for a CSS block. We take the first
+/// non-empty trimmed line (selector or at-rule header) and use it as the key.
+/// This keeps ordering stable across process runs even if internal HashMap
+/// iteration order changes somewhere upstream.
+fn css_block_sort_key(block: &str) -> String {
+    for line in block.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() { continue; }
+        return trimmed.to_string();
+    }
+    String::new()
+}
+
+/// Sort a vector of already generated (and normalized) CSS blocks
+/// deterministically by their selector / at-rule header. Tie-breaker is
+/// original index to keep stability when keys equal.
+fn sort_css_blocks(blocks: Vec<String>) -> Vec<String> {
+    let mut keyed: Vec<(String, usize, String)> = blocks
+        .into_iter()
+        .enumerate()
+        .map(|(i, b)| (css_block_sort_key(&b), i, b))
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    keyed.into_iter().map(|(_, _, b)| b).collect()
+}
+
 // Remove any empty rulesets like `.foo { }` or `.bar{\n}` that linger after transformations.
 fn remove_empty_rules(input: &str) -> String {
     let bytes = input.as_bytes();
@@ -869,6 +895,8 @@ pub fn generate_css(
     }
 
     if is_production {
+        // Even in production ensure deterministic ordering to avoid noisy diffs.
+        let css_rules = sort_css_blocks(css_rules.into_iter().map(|r| normalize_generated_css(&r)).collect());
         let css_content = css_rules.join("\n\n");
         let stylesheet = StyleSheet::parse(&css_content, ParserOptions::default()).expect("Failed to parse CSS");
         let minified_css = stylesheet
@@ -882,10 +910,12 @@ pub fn generate_css(
     // DEV MODE: Do NOT format / pretty print. We emit deterministic rule blocks only once.
     // We still apply structural normalization that impacts correctness (selector cleanup),
     // but skip any cosmetic pretty printing.
-    let mut content = String::with_capacity(css_rules.iter().map(|r| r.len()+2).sum());
-    for (i, rule) in css_rules.iter().enumerate() {
+    let normalized_blocks: Vec<String> = css_rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
+    let sorted_blocks = sort_css_blocks(normalized_blocks);
+    let mut content = String::with_capacity(sorted_blocks.iter().map(|r| r.len()+2).sum());
+    for (i, rule) in sorted_blocks.iter().enumerate() {
         if i > 0 { content.push_str("\n\n"); }
-        content.push_str(&normalize_generated_css(rule));
+        content.push_str(rule);
     }
     let content = condense_blank_lines(&content);
 
@@ -903,22 +933,25 @@ pub fn append_new_classes(
     engine: &StyleEngine,
 ) {
     if new_classes.is_empty() { return; }
+    // Read existing file (if any), reconstruct blocks, merge, sort, and rewrite.
+    let existing_blocks: Vec<String> = if let Ok(existing) = std::fs::read_to_string(output_path) {
+        if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() }
+    } else { Vec::new() };
     let refs: Vec<&str> = new_classes.iter().map(|s| s.as_str()).collect();
-    let rules = engine.generate_css_for_classes_batch(&refs);
-    if rules.is_empty() { return; }
-    let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("Failed to open CSS file for appending");
-    let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
-    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
-    let mut processed: Vec<String> = rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
-    if !is_production { for r in &mut processed { *r = condense_blank_lines(r); } }
-    let estimated: usize = processed.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
-    let mut buffer = String::with_capacity(estimated);
-    if need_leading { buffer.push('\n'); }
-    for (i, rule) in processed.iter().enumerate() {
-        if i > 0 { buffer.push_str("\n\n"); }
-        buffer.push_str(rule);
-    }
-    let _ = file.write_all(buffer.as_bytes());
+    let mut new_blocks: Vec<String> = engine.generate_css_for_classes_batch(&refs)
+        .into_iter().map(|r| normalize_generated_css(&r)).collect();
+    if new_blocks.is_empty() { return; }
+    let mut all_blocks: Vec<String> = existing_blocks.into_iter().collect();
+    all_blocks.append(&mut new_blocks);
+    // Deduplicate by sort key to avoid duplicates when reloading quickly.
+    let mut dedup_map: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for b in all_blocks { dedup_map.insert(css_block_sort_key(&b), b); }
+    let mut merged: Vec<String> = dedup_map.into_iter().map(|(_, v)| v).collect();
+    merged = sort_css_blocks(merged);
+    let mut content = String::with_capacity(merged.iter().map(|r| r.len()+2).sum());
+    for (i, r) in merged.iter().enumerate() { if i>0 { content.push_str("\n\n"); } content.push_str(r); }
+    let content = condense_blank_lines(&content);
+    crate::utils::write_buffered(output_path, content.as_bytes()).expect("Failed to write merged CSS");
 }
 
 pub fn generate_css_ids(
@@ -943,6 +976,8 @@ pub fn generate_css_ids(
 
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
     if is_production {
+        let css_rule_strings: Vec<String> = css_rule_strings.into_iter().map(|r| normalize_generated_css(&r)).collect();
+        let css_rule_strings = sort_css_blocks(css_rule_strings);
         let joined = css_rule_strings.join("\n\n");
         let stylesheet = StyleSheet::parse(&joined, ParserOptions::default()).expect("Failed to parse CSS");
         let minified_css = stylesheet
@@ -957,11 +992,10 @@ pub fn generate_css_ids(
     }
 
     // Dev: no pretty formatting, but normalize structurally.
-    let mut aggregate = String::with_capacity(css_rule_strings.iter().map(|r| r.len()+2).sum());
-    for (i, rule) in css_rule_strings.iter().enumerate() {
-        if i > 0 { aggregate.push_str("\n\n"); }
-        aggregate.push_str(&normalize_generated_css(rule));
-    }
+    let normalized: Vec<String> = css_rule_strings.into_iter().map(|r| normalize_generated_css(&r)).collect();
+    let sorted_blocks = sort_css_blocks(normalized);
+    let mut aggregate = String::with_capacity(sorted_blocks.iter().map(|r| r.len()+2).sum());
+    for (i, rule) in sorted_blocks.iter().enumerate() { if i>0 { aggregate.push_str("\n\n"); } aggregate.push_str(rule); }
     let aggregate = condense_blank_lines(&aggregate);
     if let Ok(existing) = std::fs::read_to_string(output_path) { if existing == aggregate { return; } }
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(output_path).expect("Failed to open CSS file for writing");
@@ -977,19 +1011,21 @@ pub fn append_new_classes_ids(
     interner: &ClassInterner,
 ) {
     if new_ids.is_empty() { return; }
-    let rules: Vec<Arc<String>> = engine.generate_css_for_ids(new_ids, interner);
-    if rules.is_empty() { return; }
-    let file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append");
-    let mut writer = BufWriter::new(file);
-    let need_leading = writer.get_ref().metadata().map(|m| m.len() > 0).unwrap_or(false);
-    if need_leading { writer.write_all(b"\n").expect("write leading separator"); }
-    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
-    let mut aggregate = String::with_capacity(rules.iter().map(|r| r.len()).sum::<usize>() + 64);
-    for (i, r) in rules.iter().enumerate() {
-        if i > 0 { aggregate.push_str("\n\n"); }
-        aggregate.push_str(&normalize_generated_css(r));
-    }
-    let aggregate = if is_production { aggregate } else { condense_blank_lines(&aggregate) };
-    writer.write_all(aggregate.as_bytes()).expect("write aggregated");
-    writer.flush().expect("flush append");
+    let new_rules: Vec<Arc<String>> = engine.generate_css_for_ids(new_ids, interner);
+    if new_rules.is_empty() { return; }
+    // Load existing file and rebuild deterministically.
+    let existing_blocks: Vec<String> = if let Ok(existing) = std::fs::read_to_string(output_path) {
+        if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() }
+    } else { Vec::new() };
+    let mut all_blocks: Vec<String> = existing_blocks;
+    all_blocks.extend(new_rules.into_iter().map(|r| normalize_generated_css(&r)));
+    if all_blocks.is_empty() { return; }
+    let mut dedup: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for b in all_blocks { dedup.insert(css_block_sort_key(&b), b); }
+    let mut merged: Vec<String> = dedup.into_iter().map(|(_, v)| v).collect();
+    merged = sort_css_blocks(merged);
+    let mut content = String::with_capacity(merged.iter().map(|r| r.len()+2).sum());
+    for (i, r) in merged.iter().enumerate() { if i>0 { content.push_str("\n\n"); } content.push_str(r); }
+    let content = condense_blank_lines(&content);
+    crate::utils::write_buffered(output_path, content.as_bytes()).expect("Failed to write merged CSS (ids)");
 }
