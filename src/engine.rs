@@ -227,11 +227,11 @@ impl StyleEngine {
         }
 
         let core_css_raw = self
-            .precompiled
-            .get(base_class)
-            .cloned()
+            .expand_composite(class_name) // full composite name (may contain spaces for animate chain)
+            .or_else(|| self.precompiled.get(base_class).cloned())
             .or_else(|| self.generate_color_css(base_class))
-            .or_else(|| self.generate_animation_css(class_name))
+            // Only treat as simple animate utility if not a composite grouping containing stages
+            .or_else(|| if class_name.contains(' ') { None } else { self.generate_animation_css(class_name) })
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
@@ -297,11 +297,10 @@ impl StyleEngine {
         }
 
         let core_css_raw = self
-            .precompiled
-            .get(base_class)
-            .cloned()
+            .expand_composite(class_name)
+            .or_else(|| self.precompiled.get(base_class).cloned())
             .or_else(|| self.generate_color_css(base_class))
-            .or_else(|| self.generate_animation_css(class_name))
+            .or_else(|| if class_name.contains(' ') { None } else { self.generate_animation_css(class_name) })
             .or_else(|| self.generate_dynamic_css(base_class))
             .or_else(|| self.expand_composite(base_class));
         core_css_raw.map(|mut css| {
@@ -396,11 +395,12 @@ impl StyleEngine {
         } else {
             return None;
         };
-        let resolve_tokens = |tokens: &[String]| -> Vec<String> {
-            let mut out = Vec::new();
+        let resolve_tokens = |tokens: &[String]| -> (Vec<String>, Vec<String>) {
+            let mut base_rules: Vec<String> = Vec::new();
+            let mut anim_lines: Vec<String> = Vec::new();
             for t in tokens {
-                if let Some(rest) = t.strip_prefix("animfill:") { // carry fill mode into animation system via ANIM line
-                    out.push(format!("ANIM|fill|{}", rest));
+                if let Some(rest) = t.strip_prefix("animfill:") {
+                    anim_lines.push(format!("ANIM|fill|{}", rest));
                     continue;
                 }
                 if let Some(rest) = t.strip_prefix("fluid:") {
@@ -424,19 +424,19 @@ impl StyleEngine {
                             };
                             if let (Some(min_num), Some(max_num)) = (parse_val(min_v), parse_val(max_v)) {
                                 let formula = format!("clamp({}, calc({} + {} * (100vw - {}px) / ({} - {})), {})", min_v, min_v, (max_num - min_num), min_bp, max_bp, min_bp, max_v);
-                                out.push(format!("{}: {}", prop, formula));
+                base_rules.push(format!("{}: {}", prop, formula));
                                 continue;
                             }
                         }
-                        out.push(format!("{}: clamp({}, {}, {})", prop, min_v, min_v, max_v));
+            base_rules.push(format!("{}: clamp({}, {}, {})", prop, min_v, min_v, max_v));
                         continue;
                     }
-                } else if let Some(rest) = t.strip_prefix("motion:") {
+        } else if let Some(rest) = t.strip_prefix("motion:") {
                     let hash = format!("{:x}", seahash::hash(rest.as_bytes()));
                     let kf_name = format!("dx-motion-keyframe-{}", &hash[..6]);
                     let mut keyframes = String::from("@keyframes "); keyframes.push_str(&kf_name); keyframes.push_str(" {\n  0% { transform: translateY(0) scale(1); }\n  60% { transform: translateY(-6px) scale(1.04); }\n  80% { transform: translateY(2px) scale(0.98); }\n  100% { transform: translateY(0) scale(1); }\n}\n");
-                    out.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
-                    out.push(keyframes); // Will be emitted as RAW block
+                    base_rules.push(format!("animation: {} 600ms cubic-bezier(0.34,1.56,0.64,1)", kf_name));
+                    base_rules.push(keyframes); // RAW block
                     continue;
                 } else if let Some(rest) = t.strip_prefix("gradient:mesh:") {
                     let colors: Vec<&str> = rest.split('+').filter(|c| !c.trim().is_empty()).collect();
@@ -453,35 +453,36 @@ impl StyleEngine {
                             let sz = 120.0 - r * 40.0;
                             layers.push(format!("radial-gradient(circle at {:.1}% {:.1}%, {} {:.0}%)", x, y, c.trim(), sz.max(25.0)));
                         }
-                        out.push(format!("background-image: {}", layers.join(", ")));
-                        out.push("background-size: cover".to_string());
-                        out.push("background-blend-mode: screen, lighten".to_string());
+                        base_rules.push(format!("background-image: {}", layers.join(", ")));
+                        base_rules.push("background-size: cover".to_string());
+                        base_rules.push("background-blend-mode: screen, lighten".to_string());
                     }
                     continue;
                 }
-                if let Some(rule) = self.precompiled.get(t) { out.push(rule.clone()); }
-                else if let Some(c) = self.generate_color_css(t) { out.push(c); }
-                else if let Some(d) = self.generate_dynamic_css(t) { out.push(d); }
-                else if let Some(a) = self.generate_animation_css(t) { out.push(a); }
+                if let Some(rule) = self.precompiled.get(t) { base_rules.push(rule.clone()); }
+                else if let Some(c) = self.generate_color_css(t) { base_rules.push(c); }
+                else if let Some(d) = self.generate_dynamic_css(t) { base_rules.push(d); }
+                else if let Some(a) = self.generate_animation_css(t) {
+                    if a.starts_with("ANIM|") { anim_lines.push(a); } else { base_rules.push(a); }
+                }
             }
-            out
+            (base_rules, anim_lines)
         };
 
         let mut sections: Vec<String> = Vec::new();
-        let base = resolve_tokens(&comp.base).join("; ");
-        if !base.is_empty() { sections.push(format!("BASE|{}", base)); }
-        for (child, toks) in &comp.child_rules { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("CHILD|{}|{}", child, decls)); } }
-        for (state, toks) in &comp.state_rules { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("STATE|{}|{}", state, decls)); } }
-        for (attr, toks) in &comp.data_attr_rules { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("DATA|{}|{}", attr, decls)); } }
-        for (cond, toks) in &comp.conditional_blocks { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("COND|{}|{}", cond, decls)); } }
+        let (base_rules, mut base_anim_lines) = resolve_tokens(&comp.base);
+        let base_join = base_rules.join("; ");
+        if !base_join.is_empty() { sections.push(format!("BASE|{}", base_join)); }
+        for (child, toks) in &comp.child_rules { let (decl_vec, anim_lines_child) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("CHILD|{}|{}", child, decls)); } for a in anim_lines_child { sections.push(a); } }
+        for (state, toks) in &comp.state_rules { let (decl_vec, anim_lines_state) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("STATE|{}|{}", state, decls)); } for a in anim_lines_state { sections.push(a); } }
+        for (attr, toks) in &comp.data_attr_rules { let (decl_vec, anim_lines_data) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("DATA|{}|{}", attr, decls)); } for a in anim_lines_data { sections.push(a); } }
+        for (cond, toks) in &comp.conditional_blocks { let (decl_vec, anim_lines_cond) = resolve_tokens(toks); let decls = decl_vec.join("; "); if !decls.is_empty() { sections.push(format!("COND|{}|{}", cond, decls)); } for a in anim_lines_cond { sections.push(a); } }
         // Animation lines stored in comp.animations use parser formats:
         //   animate: utility encoded earlier as base token (animate:duration[:delay]) -> handled via generate_animation_css
         //   from|token+token  / to|token+token / via|token+token  (stage declarations)
         //   animfill:forwards stored in base tokens -> already in comp.base as animfill:forwards
-    for anim in &comp.animations {
-            // Prefix with ANIM| <type>|<decls-or-metadata>
-            sections.push(format!("ANIM|{}", anim));
-        }
+    for line in base_anim_lines { sections.push(line); }
+    for anim in &comp.animations { sections.push(format!("ANIM|{}", anim)); }
         for raw in &comp.extra_raw { sections.push(format!("RAW|{}", raw)); }
         if sections.is_empty() { return None; }
         Some(sections.join("\n"))
@@ -833,15 +834,18 @@ impl StyleEngine {
             frames.sort_by_key(|(p, _)| *p);
             // Only emit if we have at least one frame with declarations
             let mut kf_body = String::new();
-            for (pct, decls) in &frames { if !decls.trim().is_empty() { kf_body.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); } }
+            for (pct, decls) in &frames {
+                let dtrim = decls.trim(); if dtrim.is_empty() { continue; }
+                let line = if dtrim.ends_with(';') { dtrim.to_string() } else { format!("{};", dtrim) };
+                kf_body.push_str(&format!("  {}% {{ {} }}\n", pct, line));
+            }
             if !kf_body.is_empty() {
                 out.push_str("@keyframes dx-anim-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
                 // Build animation shorthand: duration [delay] fillMode keyframesName
                 let mut parts: Vec<String> = Vec::new();
                 parts.push(pa.duration.clone());
                 if pa.delay != "0s" { parts.push(pa.delay.clone()); }
-                let fill = if pa.fill_mode.is_empty() { "both" } else { pa.fill_mode.as_str() };
-                parts.push(fill.to_string());
+                if !pa.fill_mode.is_empty() { parts.push(pa.fill_mode.clone()); }
                 parts.push(format!("dx-anim-{}", hash));
                 let value = parts.join(" ");
                 out.push_str(&build_block(base_selector, &format!("animation: {}", value)));
