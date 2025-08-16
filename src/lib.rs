@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod composites;
 pub mod data_manager;
+pub mod config;
 pub mod engine;
 pub mod generator;
 pub mod interner;

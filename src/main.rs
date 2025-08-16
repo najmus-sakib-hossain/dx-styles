@@ -1,6 +1,7 @@
 mod cache;
 mod composites;
 mod data_manager;
+mod config;
 mod engine;
 mod generator;
 mod interner;
@@ -77,9 +78,14 @@ fn main() {
         }
     };
 
-    let output_file = PathBuf::from("playgrounds/nextjs/app/globals.css")
+    // Load framework configuration
+    let project_root = std::env::current_dir().expect("Failed to get current dir");
+    let resolved = config::ResolvedConfig::resolve(&project_root);
+    utils::set_extensions(resolved.extensions.clone());
+    let output_file = resolved
+        .output_css
         .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("playgrounds/nextjs/app/globals.css"));
+        .unwrap_or_else(|_| resolved.output_css.clone());
     let cache = match ClassnameCache::new(".dx/cache") {
         Ok(c) => c,
         Err(e) => {
@@ -87,7 +93,7 @@ fn main() {
             process::exit(1);
         }
     };
-    let dir = PathBuf::from("playgrounds/nextjs");
+    let dir = resolved.root_dir.clone();
     let dir_canonical = dir.canonicalize().unwrap_or_else(|_| dir.clone());
 
     let mut interner = interner::ClassInterner::new();
@@ -201,7 +207,12 @@ fn main() {
     } else {
         println!(
             "{}",
-            "No .tsx or .jsx files found in playgrounds/nextjs/.".yellow()
+            format!(
+                "No source files with extensions {:?} found in {}.",
+                resolved.extensions,
+                dir_canonical.display()
+            )
+            .yellow()
         );
     }
 

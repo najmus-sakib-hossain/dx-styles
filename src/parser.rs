@@ -6,6 +6,7 @@ use oxc_ast::ast::{
 };
 use oxc_parser::Parser;
 use oxc_span::SourceType;
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -16,6 +17,30 @@ pub fn parse_classnames(path: &Path) -> HashSet<String> {
         return HashSet::new();
     }
 
+    // Fast path for plain HTML files: extract class attribute values.
+    if matches!(path.extension().and_then(|s| s.to_str()), Some("html")) {
+        let mut set = HashSet::new();
+        // Matches class="..." or class='...'
+        // We purposefully keep this simple; it skips over angle brackets greedily within quotes.
+        static CLASS_RE: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
+            // (?i) for case-insensitive, then match class= followed by quoted value with either " or '
+            // Capture inside either double or single quotes into group 1 or 2 respectively.
+            Regex::new(r#"(?i)class\s*=\s*(?:"([^"]+)"|'([^']+)')"#).unwrap()
+        });
+        for caps in CLASS_RE.captures_iter(&source_text) {
+            if let Some(val) = caps.get(1).or_else(|| caps.get(2)) {
+                for token in val.as_str().split(|c: char| c.is_whitespace()) {
+                    let token = token.trim();
+                    if !token.is_empty() {
+                        set.insert(token.to_string());
+                    }
+                }
+            }
+        }
+        return set;
+    }
+
+    // Default JS/TS/JSX parser path.
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(path)
         .unwrap_or_default()

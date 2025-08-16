@@ -135,17 +135,17 @@
   }
 }
 
-@keyframes dx-anim-3ca706a340e08c85 {
+@keyframes dx-animation-3ca706a340e08c85 {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
 
 .animate\:1s {
-  animation: 1s forwards dx-anim-3ca706a340e08c85;
+  animation: 1s forwards dx-animation-3ca706a340e08c85;
 }
 
 @media (min-width: 1024px) {
-  .lg\(p-69\) {
-    padding: 17.25rem;
+  .lg\(p-21\) {
+    padding: 5.25rem;
   }
 }

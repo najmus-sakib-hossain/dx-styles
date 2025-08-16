@@ -1,7 +1,9 @@
 use colored::Colorize;
+use once_cell::sync::Lazy;
 use std::fs::OpenOptions;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use std::time::Duration;
 use walkdir::WalkDir;
 
@@ -11,6 +13,17 @@ pub struct ChangeTimings {
     pub update_maps: Duration,
     pub generate_css: Duration,
     pub cache_write: Duration,
+}
+
+static EXTENSIONS: Lazy<RwLock<Vec<String>>> = Lazy::new(|| RwLock::new(vec![
+    "tsx".into(),
+    "jsx".into(),
+    "html".into(),
+]));
+
+pub fn set_extensions(exts: Vec<String>) {
+    let mut w = EXTENSIONS.write().unwrap();
+    *w = exts;
 }
 
 pub fn find_code_files(dir: &Path) -> Vec<PathBuf> {
@@ -39,8 +52,12 @@ pub fn write_buffered(path: &Path, data: &[u8]) -> io::Result<()> {
 }
 
 pub fn is_code_file(path: &Path) -> bool {
-    path.extension()
-        .map_or(false, |ext| ext == "tsx" || ext == "jsx")
+    if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+        let list = EXTENSIONS.read().unwrap();
+        list.iter().any(|e| e == ext)
+    } else {
+        false
+    }
 }
 
 fn format_duration(d: Duration) -> String {
