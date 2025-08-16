@@ -685,12 +685,12 @@ impl StyleEngine {
                 kf_body.push_str(&format!("  {}% {{ {} }}\n", pct, line));
             }
             if !kf_body.is_empty() {
-                out.push_str("@keyframes dx-anim-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
+                out.push_str("@keyframes dx-animation-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
                 let mut parts: Vec<String> = Vec::new();
                 parts.push(pa.duration.clone());
                 if pa.delay != "0s" { parts.push(pa.delay.clone()); }
                 if !pa.fill_mode.is_empty() { parts.push(pa.fill_mode.clone()); }
-                parts.push(format!("dx-anim-{}", hash));
+                parts.push(format!("dx-animation-{}", hash));
                 let mut filtered: Vec<String> = Vec::new();
                 let mut seen_fill = false;
                 for p in parts.into_iter() {
