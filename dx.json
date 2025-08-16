@@ -44,12 +44,12 @@
         "fix": {}
     },
     "styles": {
+        "style": "./styles",
         "engine": [
             "automic",
             "enhanced",
             "logical"
         ],
-        "path": "./styles",
         "themes": [
             "dx",
             "vercel",
@@ -57,14 +57,18 @@
         ]
     },
     "media": {
-        "images": "./public/images",
-        "videos": "./public/videos",
-        "sounds": "./public/sounds",
-        "assets": "./public/assets"
+        "image": "./public/images",
+        "video": "./public/videos",
+        "sound": "./public/sounds",
+        "asset": "./public/assets",
+        "images": [],
+        "videos": [],
+        "sounds": [],
+        "assets": []
     },
     "internationalization": {
         "locale": "./locales",
-        "tts": "./locales",
+        "tts": "./ttses",
         "defaultLocale": "en-US",
         "defaultTts": "en-US",
         "locales": {
@@ -87,8 +91,8 @@
         }
     },
     "icons": {
-        "pack": "lucide-react",
-        "source": "default"
+        "icon": "lucide-react",
+        "variant": "default"
     },
     "fonts": {
         "font": "./fonts",
