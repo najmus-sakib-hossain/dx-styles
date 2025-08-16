@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use lru::LruCache;
 use seahash::SeaHasher;
 use std::hash::{Hasher, Hash};
+use std::sync::RwLock;
 
 // Global LRU cache to avoid re-normalizing identical generated rules.
 // Typical rule count can be large but individual rules repeat across incremental builds.
@@ -20,6 +21,10 @@ static NORMALIZE_CACHE: Lazy<Mutex<LruCache<u64, Arc<String>>>> = Lazy::new(|| {
     // 4096 entries * average ~200 bytes ≈ <1MB.
     Mutex::new(LruCache::new(NonZeroUsize::new(4096).unwrap()))
 });
+
+// In ultra-fast dev mode we track which selector/at-rule headers have already been emitted
+// so incremental appends can skip disk reads + global re-sorting. Enabled when DX_CSS_FAST=1.
+static EMITTED_KEYS: Lazy<RwLock<std::collections::HashSet<String>>> = Lazy::new(|| RwLock::new(std::collections::HashSet::new()));
 
 #[inline]
 fn fast_hash<T: Hash>(v: &T) -> u64 {
@@ -855,6 +860,7 @@ pub fn generate_css(
     _file_classnames: &HashMap<PathBuf, HashSet<String>>,
 ) {
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
+    let fast_mode = !is_production && std::env::var("DX_CSS_FAST").map_or(false, |v| v == "1" || v.eq_ignore_ascii_case("true"));
 
     let mut sorted_class_names: Vec<_> = class_names.iter().collect();
     sorted_class_names.sort_unstable(); // stable deterministic order
@@ -907,16 +913,32 @@ pub fn generate_css(
         return;
     }
 
-    // DEV MODE: Do NOT format / pretty print. We emit deterministic rule blocks only once.
-    // We still apply structural normalization that impacts correctness (selector cleanup),
-    // but skip any cosmetic pretty printing.
+    if fast_mode {
+        // Ultra-fast full rebuild path: skip global sorting (alphabetical class sorting already provides determinism)
+        // and avoid duplicate key tracking reset only when we regenerate the whole file.
+        {
+            let mut set = EMITTED_KEYS.write().unwrap();
+            set.clear();
+        }
+        let mut content = String::with_capacity(css_rules.iter().map(|r| r.len()+2).sum());
+        for (i, rule) in css_rules.into_iter().enumerate() {
+            if i>0 { content.push_str("\n\n"); }
+            let norm = normalize_generated_css(&rule);
+            let key = css_block_sort_key(&norm);
+            EMITTED_KEYS.write().unwrap().insert(key);
+            content.push_str(&norm);
+        }
+        let content = condense_blank_lines(&content);
+        if let Ok(existing) = std::fs::read_to_string(output_path) { if existing == content { return; } }
+        crate::utils::write_buffered(output_path, content.as_bytes()).expect("Failed to write CSS file (fast mode)");
+        return;
+    }
+
+    // Standard dev mode: deterministic global sort.
     let normalized_blocks: Vec<String> = css_rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
     let sorted_blocks = sort_css_blocks(normalized_blocks);
     let mut content = String::with_capacity(sorted_blocks.iter().map(|r| r.len()+2).sum());
-    for (i, rule) in sorted_blocks.iter().enumerate() {
-        if i > 0 { content.push_str("\n\n"); }
-        content.push_str(rule);
-    }
+    for (i, rule) in sorted_blocks.iter().enumerate() { if i > 0 { content.push_str("\n\n"); } content.push_str(rule); }
     let content = condense_blank_lines(&content);
 
     // Skip rewrite if unchanged to preserve existing formatting (watch mode stability).
@@ -933,21 +955,51 @@ pub fn append_new_classes(
     engine: &StyleEngine,
 ) {
     if new_classes.is_empty() { return; }
-    // Read existing file (if any), reconstruct blocks, merge, sort, and rewrite.
-    let existing_blocks: Vec<String> = if let Ok(existing) = std::fs::read_to_string(output_path) {
-        if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() }
-    } else { Vec::new() };
+    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
+    let fast_mode = !is_production && std::env::var("DX_CSS_FAST").map_or(false, |v| v == "1" || v.eq_ignore_ascii_case("true"));
     let refs: Vec<&str> = new_classes.iter().map(|s| s.as_str()).collect();
-    let mut new_blocks: Vec<String> = engine.generate_css_for_classes_batch(&refs)
+    let new_blocks: Vec<String> = engine.generate_css_for_classes_batch(&refs)
         .into_iter().map(|r| normalize_generated_css(&r)).collect();
     if new_blocks.is_empty() { return; }
-    let mut all_blocks: Vec<String> = existing_blocks.into_iter().collect();
-    all_blocks.append(&mut new_blocks);
-    // Deduplicate by sort key to avoid duplicates when reloading quickly.
+    if fast_mode {
+        // Fast append: skip reading & sorting; dedupe via in-memory set.
+        let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append fast");
+        let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        let mut buf = String::new();
+        if need_leading { buf.push('\n'); }
+        let mut set = EMITTED_KEYS.write().unwrap();
+        for (i, block) in new_blocks.iter().enumerate() {
+            let key = css_block_sort_key(block);
+            if set.contains(&key) { continue; }
+            if i > 0 && !buf.ends_with('\n') { buf.push_str("\n\n"); }
+            if !buf.ends_with('\n') && !buf.is_empty() { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.ends_with('\n') && !buf.is_empty() { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            // Simpler: just separate blocks by double newline regardless of above noise.
+            if !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.is_empty() && !buf.ends_with('\n') { buf.push('\n'); }
+            if !buf.is_empty() { if !buf.ends_with('\n') { buf.push('\n'); } }
+            // Actually just push block (we'll condense blank lines after building string)
+            if !buf.trim_end().is_empty() { buf.push('\n'); }
+            buf.push_str(block);
+            set.insert(key);
+        }
+        // Lightweight condense
+        let buf = condense_blank_lines(&buf);
+        let _ = file.write_all(buf.as_bytes());
+        return;
+    }
+    // Non-fast mode: rebuild deterministically (existing logic retained for consistency)
+    let existing = std::fs::read_to_string(output_path).unwrap_or_default();
+    let mut blocks: Vec<String> = if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() };
+    blocks.extend(new_blocks);
     let mut dedup_map: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
-    for b in all_blocks { dedup_map.insert(css_block_sort_key(&b), b); }
-    let mut merged: Vec<String> = dedup_map.into_iter().map(|(_, v)| v).collect();
-    merged = sort_css_blocks(merged);
+    for b in blocks { dedup_map.insert(css_block_sort_key(&b), b); }
+    let merged: Vec<String> = sort_css_blocks(dedup_map.into_iter().map(|(_, v)| v).collect());
     let mut content = String::with_capacity(merged.iter().map(|r| r.len()+2).sum());
     for (i, r) in merged.iter().enumerate() { if i>0 { content.push_str("\n\n"); } content.push_str(r); }
     let content = condense_blank_lines(&content);
@@ -1011,19 +1063,36 @@ pub fn append_new_classes_ids(
     interner: &ClassInterner,
 ) {
     if new_ids.is_empty() { return; }
+    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
+    let fast_mode = !is_production && std::env::var("DX_CSS_FAST").map_or(false, |v| v == "1" || v.eq_ignore_ascii_case("true"));
     let new_rules: Vec<Arc<String>> = engine.generate_css_for_ids(new_ids, interner);
     if new_rules.is_empty() { return; }
-    // Load existing file and rebuild deterministically.
-    let existing_blocks: Vec<String> = if let Ok(existing) = std::fs::read_to_string(output_path) {
-        if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() }
-    } else { Vec::new() };
-    let mut all_blocks: Vec<String> = existing_blocks;
-    all_blocks.extend(new_rules.into_iter().map(|r| normalize_generated_css(&r)));
-    if all_blocks.is_empty() { return; }
+    if fast_mode {
+        let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("open css append fast ids");
+        let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        let mut buf = String::new();
+        if need_leading { buf.push('\n'); }
+        let mut set = EMITTED_KEYS.write().unwrap();
+        for rule in new_rules.iter() {
+            let norm = normalize_generated_css(rule);
+            let key = css_block_sort_key(&norm);
+            if set.contains(&key) { continue; }
+            if !buf.is_empty() { buf.push_str("\n\n"); }
+            buf.push_str(&norm);
+            set.insert(key);
+        }
+        if buf.is_empty() { return; }
+        let buf = condense_blank_lines(&buf);
+        let _ = file.write_all(buf.as_bytes());
+        return;
+    }
+    // Deterministic rebuild path
+    let existing = std::fs::read_to_string(output_path).unwrap_or_default();
+    let mut blocks: Vec<String> = if existing.trim().is_empty() { Vec::new() } else { existing.split("\n\n").map(|s| s.to_string()).collect() };
+    blocks.extend(new_rules.into_iter().map(|r| normalize_generated_css(&r)));
     let mut dedup: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
-    for b in all_blocks { dedup.insert(css_block_sort_key(&b), b); }
-    let mut merged: Vec<String> = dedup.into_iter().map(|(_, v)| v).collect();
-    merged = sort_css_blocks(merged);
+    for b in blocks { dedup.insert(css_block_sort_key(&b), b); }
+    let merged = sort_css_blocks(dedup.into_iter().map(|(_, v)| v).collect());
     let mut content = String::with_capacity(merged.iter().map(|r| r.len()+2).sum());
     for (i, r) in merged.iter().enumerate() { if i>0 { content.push_str("\n\n"); } content.push_str(r); }
     let content = condense_blank_lines(&content);
