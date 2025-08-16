@@ -1,6 +1,8 @@
 # Dx
 Enhance Developer Experience
 
+for file in $(ls *.rs | grep -v -E 'main.rs|lib.rs'); do dir_name="${file%.rs}"; mkdir "$dir_name"; mv "$file" "$dir_name/mod.rs"; done
+
 ```md
 1. Error: Incorrect Conditional/Container Query Generation
 What the Engine Did:
