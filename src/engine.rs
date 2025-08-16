@@ -567,9 +567,27 @@ impl StyleEngine {
             } else if let Some(rest) = line.strip_prefix("COND|") {
                 let mut parts = rest.splitn(2,'|'); let cond = parts.next().unwrap_or(""); let decls = parts.next().unwrap_or("");
                 if let Some(val) = cond.strip_prefix("@container>") {
-                    out.push_str(&format!("@container (min-width: {}) {{\n  {}\n}}\n", val, build_block(selector, decls)));
+                    let inner = build_block(selector, decls);
+                    let inner_trimmed = inner.trim_end();
+                    out.push_str(&format!("@container (min-width: {}) {{\n", val));
+                    for l in inner_trimmed.lines() {
+                        out.push_str("  ");
+                        out.push_str(l);
+                        out.push('\n');
+                    }
+                    out.push_str("}\n");
                 }
-                else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) { out.push_str(&format!("@media (min-width: {}) {{\n  {}\n}}\n", v, build_block(selector, decls))); } }
+                else if let Some(bp) = cond.strip_prefix("screen:") { if let Some(v) = self.screens.get(bp) {
+                    let inner = build_block(selector, decls);
+                    let inner_trimmed = inner.trim_end();
+                    out.push_str(&format!("@media (min-width: {}) {{\n", v));
+                    for l in inner_trimmed.lines() {
+                        out.push_str("  ");
+                        out.push_str(l);
+                        out.push('\n');
+                    }
+                    out.push_str("}\n");
+                } }
                 else if let Some(rest) = cond.strip_prefix("self:child-count>") {
                     if let Ok(threshold) = rest.parse::<usize>() {
                         if threshold > 0 {
@@ -614,37 +632,41 @@ impl StyleEngine {
 
     fn wrap_media_queries(&self, mut css_body: String, media_queries: &[String]) -> String {
         for mq in media_queries.iter().rev() {
-            let mut wrapped = String::new(); wrapped.push_str(mq); wrapped.push_str(" {\n");
-            for line in css_body.lines() { wrapped.push_str("  "); wrapped.push_str(line); wrapped.push('\n'); }
-            wrapped.push('}'); css_body = wrapped;
+            let mut wrapped = String::new();
+            wrapped.push_str(mq);
+            wrapped.push_str(" {\n");
+            for line in css_body.trim_end().lines() {
+                if line.is_empty() { continue; }
+                wrapped.push_str("  ");
+                wrapped.push_str(line);
+                wrapped.push('\n');
+            }
+            wrapped.push_str("}\n"); // closing for this media/container
+            css_body = wrapped;
         }
+        if !css_body.ends_with('\n') { css_body.push('\n'); }
         css_body
     }
 }
 
 fn build_block(selector: &str, declarations: &str) -> String {
-    let mut s = String::new();
+    let decl_raw = declarations.trim().trim_end_matches(';').trim();
+    let mut seen: HashMap<&str, usize> = HashMap::new();
+    let parts: Vec<&str> = if decl_raw.is_empty() { Vec::new() } else if decl_raw.contains(';') { decl_raw.split(';').collect() } else { vec![decl_raw] };
+    for (i,p) in parts.iter().enumerate() { if let Some(idx)=p.find(':') { seen.insert(p[..idx].trim(), i); } }
+    let mut s = String::with_capacity(selector.len() + decl_raw.len() + 16);
     s.push_str(selector);
-    s.push_str(" {\n  ");
-    let decl = declarations.trim().trim_end_matches(';').to_string();
-    let parts: Vec<&str> = if decl.contains(';') { decl.split(';').collect() } else { vec![decl.as_str()] };
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for (i,p) in parts.iter().enumerate() { if let Some(idx)=p.find(':') { let name=p[..idx].trim(); counts.insert(name, i); } }
+    s.push_str(" {\n");
     for (i,p) in parts.iter().enumerate() {
-        let p_trim = p.trim(); if p_trim.is_empty() { continue; }
-        let prop_name = p_trim.split(':').next().unwrap_or("").trim();
-        if counts.get(prop_name)==Some(&i) {
-            s.push_str(p_trim.trim_end_matches(';'));
-            s.push_str(";\n  ");
+        let pt = p.trim(); if pt.is_empty() { continue; }
+        let name = pt.split(':').next().unwrap_or("").trim();
+        if seen.get(name)==Some(&i) { // last occurrence
+            s.push_str("  ");
+            s.push_str(pt.trim_end_matches(';'));
+            s.push_str(";\n");
         }
     }
-    // If we ended with a newline + two spaces, keep the newline (for closing brace placement) but drop trailing spaces.
-    if s.ends_with("\n  ") {
-        s.truncate(s.len()-2); // leave the trailing newline intact
-    }
-    if !s.ends_with('\n') { s.push('\n'); }
     s.push_str("}\n");
-    while s.ends_with("\n\n") { s.pop(); }
     s
 }
 
