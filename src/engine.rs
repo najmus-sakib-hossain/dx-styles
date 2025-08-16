@@ -638,7 +638,11 @@ fn build_block(selector: &str, declarations: &str) -> String {
             s.push_str(";\n  ");
         }
     }
-    if s.ends_with("\n  ") { s.truncate(s.len()-3); }
+    // If we ended with a newline + two spaces, keep the newline (for closing brace placement) but drop trailing spaces.
+    if s.ends_with("\n  ") {
+        s.truncate(s.len()-2); // leave the trailing newline intact
+    }
+    if !s.ends_with('\n') { s.push('\n'); }
     s.push_str("}\n");
     while s.ends_with("\n\n") { s.pop(); }
     s
@@ -661,3 +665,4 @@ fn sanitize_declarations(input: &str) -> String {
     }
     out
 }
+

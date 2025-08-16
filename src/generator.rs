@@ -93,6 +93,22 @@ fn normalize_generated_css(css: &str) -> String {
     out
 }
 
+// Lightweight blank line condensing: collapse 3+ consecutive newlines to 2, trim leading/trailing.
+fn condense_blank_lines(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut newline_run = 0usize;
+    for ch in input.chars() {
+        if ch == '\n' { newline_run += 1; } else { newline_run = 0; }
+        if newline_run <= 2 { out.push(ch); }
+    }
+    // Trim leading blank lines
+    while out.starts_with('\n') { out.remove(0); }
+    // Ensure single trailing newline
+    while out.ends_with('\n') { out.pop(); }
+    out.push('\n');
+    out
+}
+
 /// Extremely fast (approx O(n)) heuristic CSS pretty-printer intended only for
 /// internally generated CSS we control. Avoids full parsing for <1ms latency.
 /// It normalizes:
@@ -100,6 +116,7 @@ fn normalize_generated_css(css: &str) -> String {
 /// - Indentation with two spaces
 /// - Blank line between top-level rules
 /// It does NOT guarantee spec-compliant formatting for arbitrary user CSS.
+#[allow(dead_code)]
 fn pretty_format_css_fast(input: &str) -> String {
     // Small fast-path: if already looks formatted (has \n  ) just return.
     if input.as_bytes().windows(3).any(|w| w == b"\n  ") {
@@ -690,47 +707,69 @@ pub fn generate_css(
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
 
     let mut sorted_class_names: Vec<_> = class_names.iter().collect();
-    sorted_class_names.sort_unstable();
+    sorted_class_names.sort_unstable(); // stable deterministic order
 
     let css_rules: Vec<String> = if sorted_class_names.len() < 512 {
         let refs: Vec<&str> = sorted_class_names.iter().map(|s| s.as_str()).collect();
         engine.generate_css_for_classes_batch(&refs)
     } else {
-        const CHUNK: usize = 512;
-        sorted_class_names
-            .par_chunks(CHUNK)
-            .flat_map_iter(|chunk| {
-                let refs: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
-                engine.generate_css_for_classes_batch(&refs)
-            })
-            .collect()
+        // In production keep parallel generation for speed, then re-order deterministically.
+        if is_production {
+            const CHUNK: usize = 512;
+            let mut pairs: Vec<(String, String)> = sorted_class_names
+                .par_chunks(CHUNK)
+                .flat_map_iter(|chunk| {
+                    let refs: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+                    engine.generate_css_for_classes_batch(&refs)
+                        .into_iter()
+                        .zip(chunk.iter().map(|s| (*s).to_string()))
+                        .map(|(css, name)| (name, css))
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            pairs.sort_by(|a,b| a.0.cmp(&b.0));
+            pairs.into_iter().map(|(_, css)| css).collect()
+        } else {
+            // Deterministic serial generation in dev for stability.
+            let refs: Vec<&str> = sorted_class_names.iter().map(|s| s.as_str()).collect();
+            engine.generate_css_for_classes_batch(&refs)
+        }
     };
 
     if css_rules.is_empty() {
-        crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+        // Only write (or truncate) if file not already empty to avoid needless FS churn in dev.
+        if is_production || !output_path.exists() || std::fs::metadata(output_path).map(|m| m.len() > 0).unwrap_or(true) {
+            crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+        }
         return;
     }
 
-    let css_content = css_rules.join("\n\n");
-
     if is_production {
+        let css_content = css_rules.join("\n\n");
         let stylesheet = StyleSheet::parse(&css_content, ParserOptions::default()).expect("Failed to parse CSS");
         let minified_css = stylesheet
             .to_css(PrinterOptions { minify: true, ..Default::default() })
             .expect("Failed to minify CSS");
         let normalized = normalize_generated_css(&minified_css.code);
         crate::utils::write_buffered(output_path, normalized.as_bytes()).expect("Failed to write minified CSS");
-    } else {
-    // Normalize each rule individually with caching, then join and pretty once.
-    // This reduces repeated transforms on shared substrings.
-    let mut buf = String::with_capacity(css_content.len() + 64);
-    for (idx, rule) in css_rules.iter().enumerate() {
-        if idx > 0 { buf.push_str("\n\n"); }
-        buf.push_str(&normalize_generated_css(rule));
+        return;
     }
-    let pretty = pretty_format_css_fast(&buf);
-    crate::utils::write_buffered(output_path, pretty.as_bytes()).expect("Failed to write CSS file");
+
+    // DEV MODE: Do NOT format / pretty print. We emit deterministic rule blocks only once.
+    // We still apply structural normalization that impacts correctness (selector cleanup),
+    // but skip any cosmetic pretty printing.
+    let mut content = String::with_capacity(css_rules.iter().map(|r| r.len()+2).sum());
+    for (i, rule) in css_rules.iter().enumerate() {
+        if i > 0 { content.push_str("\n\n"); }
+        content.push_str(&normalize_generated_css(rule));
     }
+    let content = condense_blank_lines(&content);
+
+    // Skip rewrite if unchanged to preserve existing formatting (watch mode stability).
+    if let Ok(existing) = std::fs::read_to_string(output_path) {
+        if existing == content { return; }
+    }
+    crate::utils::write_buffered(output_path, content.as_bytes()).expect("Failed to write CSS file");
 }
 
 #[allow(dead_code)]
@@ -745,11 +784,13 @@ pub fn append_new_classes(
     if rules.is_empty() { return; }
     let mut file = OpenOptions::new().create(true).append(true).open(output_path).expect("Failed to open CSS file for appending");
     let need_leading = file.metadata().map(|m| m.len() > 0).unwrap_or(false);
-    let normalized_rules: Vec<String> = rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
-    let estimated: usize = normalized_rules.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
+    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
+    let mut processed: Vec<String> = rules.into_iter().map(|r| normalize_generated_css(&r)).collect();
+    if !is_production { for r in &mut processed { *r = condense_blank_lines(r); } }
+    let estimated: usize = processed.iter().map(|r| r.len() + 2).sum::<usize>() + 4;
     let mut buffer = String::with_capacity(estimated);
     if need_leading { buffer.push('\n'); }
-    for (i, rule) in normalized_rules.iter().enumerate() {
+    for (i, rule) in processed.iter().enumerate() {
         if i > 0 { buffer.push_str("\n\n"); }
         buffer.push_str(rule);
     }
@@ -761,7 +802,7 @@ pub fn generate_css_ids(
     output_path: &Path,
     engine: &StyleEngine,
     interner: &ClassInterner,
-    force_format: bool,
+    _force_format: bool, // kept for backward compatibility; ignored in dev per requirements
 ) {
     let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
     sorted.sort_unstable();
@@ -788,33 +829,21 @@ pub fn generate_css_ids(
         return;
     }
 
-    if force_format {
-        // Avoid heavy parse when possible; attempt parse only if size below threshold.
-        if joined.len() < 32_768 {
-            if let Ok(stylesheet) = StyleSheet::parse(&joined, ParserOptions::default()) {
-                if let Ok(formatted) = stylesheet.to_css(PrinterOptions { minify: false, ..Default::default() }) {
-                    let mut code = formatted.code;
-                    if !code.ends_with('\n') { code.push('\n'); }
-                    let normalized = normalize_generated_css(&code);
-                    let pretty = pretty_format_css_fast(&normalized);
-                    crate::utils::write_buffered(output_path, pretty.as_bytes()).expect("Failed to write formatted CSS");
-                    return;
-                }
-            }
-        }
-    }
-
-    let file = OpenOptions::new().create(true).write(true).truncate(true).open(output_path).expect("Failed to open CSS file for writing");
-    let mut writer = BufWriter::new(file);
-    // Normalize all first, then pretty format once to minimize passes.
+    // Dev: ignore force_format (only format in prod per requirement). Produce deterministic blocks.
     let mut aggregate = String::with_capacity(joined.len() + 64);
     for (i, rule) in css_rules.iter().enumerate() {
         if i > 0 { aggregate.push_str("\n\n"); }
         aggregate.push_str(&normalize_generated_css(rule));
     }
-    let pretty = if force_format { pretty_format_css_fast(&aggregate) } else { aggregate };
-    writer.write_all(pretty.as_bytes()).expect("write combined");
-    if !pretty.ends_with('\n') { writer.write_all(b"\n").expect("trailing newline"); }
+    let aggregate = condense_blank_lines(&aggregate);
+
+    // Skip write if unchanged.
+    if let Ok(existing) = std::fs::read_to_string(output_path) {
+        if existing == aggregate { return; }
+    }
+    let file = OpenOptions::new().create(true).write(true).truncate(true).open(output_path).expect("Failed to open CSS file for writing");
+    let mut writer = BufWriter::new(file);
+    writer.write_all(aggregate.as_bytes()).expect("write combined");
     writer.flush().expect("Failed to flush CSS writer");
 }
 
@@ -831,14 +860,13 @@ pub fn append_new_classes_ids(
     let mut writer = BufWriter::new(file);
     let need_leading = writer.get_ref().metadata().map(|m| m.len() > 0).unwrap_or(false);
     if need_leading { writer.write_all(b"\n").expect("write leading separator"); }
-    // Aggregate then pretty once.
+    let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
     let mut aggregate = String::with_capacity(rules.iter().map(|r| r.len()).sum::<usize>() + 64);
     for (i, r) in rules.iter().enumerate() {
         if i > 0 { aggregate.push_str("\n\n"); }
         aggregate.push_str(&normalize_generated_css(r));
     }
-    let pretty = pretty_format_css_fast(&aggregate);
-    writer.write_all(pretty.as_bytes()).expect("write aggregated");
-    if !pretty.ends_with('\n') { writer.write_all(b"\n").expect("trailing newline"); }
+    let aggregate = if is_production { aggregate } else { condense_blank_lines(&aggregate) };
+    writer.write_all(aggregate.as_bytes()).expect("write aggregated");
     writer.flush().expect("flush append");
 }
