@@ -2,8 +2,8 @@ export default function Home() {
   return (
     <main
       className="
-        bg-red-500 min-h-screen w-screen p-4 text-gray-800
-        lg(p-8)
+        bg-yellow-500 min-h-screen w-screen p-10 text-white-800
+        lg(p-16)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)
         animate:1s from(opacity-0) to(opacity-100) forwards
@@ -11,7 +11,7 @@ export default function Home() {
     >
       <div className="max-w-5xl mx-auto">
         
-        <div className="card(p-8 bg-black/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
+        <div className="card(p-7 bg-black/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
           
           <h1 className="text-4xl md:text-5xl ~text(2rem@md, 3rem@xl)">
             Dx Styles Grouping

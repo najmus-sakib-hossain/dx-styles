@@ -33,16 +33,22 @@ pub fn process_file_change(
     );
     let update_maps_duration = update_maps_start.elapsed();
 
-    let mut generate_css_duration = Duration::new(0, 0);
-    if removed_global > 0 {
+    let always_regen = std::env::var("DX_ALWAYS_REGEN").map_or(false, |v| matches!(v.as_str(), "1"|"true"|"TRUE"|"yes"));
+    let generate_css_duration = if removed_global > 0 {
         let generate_css_start = Instant::now();
-    generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
-        generate_css_duration = generate_css_start.elapsed();
+        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
+        generate_css_start.elapsed()
     } else if added_global > 0 {
         let generate_css_start = Instant::now();
         generator::append_new_classes_ids(&added_globals_vec, output_path, style_engine, interner);
-        generate_css_duration = generate_css_start.elapsed();
-    }
+        generate_css_start.elapsed()
+    } else if always_regen {
+        let generate_css_start = Instant::now();
+        generator::generate_css_ids(global_classnames_ids, output_path, style_engine, interner, false);
+        generate_css_start.elapsed()
+    } else {
+        Duration::new(0,0)
+    };
 
     let cache_set_start = Instant::now();
     let mut back_to_strings: HashSet<String> = HashSet::new();

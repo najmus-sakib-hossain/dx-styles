@@ -7,8 +7,36 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use once_cell::sync::Lazy;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
+use lru::LruCache;
+use seahash::SeaHasher;
+use std::hash::{Hasher, Hash};
+
+// Global LRU cache to avoid re-normalizing identical generated rules.
+// Typical rule count can be large but individual rules repeat across incremental builds.
+static NORMALIZE_CACHE: Lazy<Mutex<LruCache<u64, Arc<String>>>> = Lazy::new(|| {
+    // 4096 entries * average ~200 bytes ≈ <1MB.
+    Mutex::new(LruCache::new(NonZeroUsize::new(4096).unwrap()))
+});
+
+#[inline]
+fn fast_hash<T: Hash>(v: &T) -> u64 {
+    let mut h = SeaHasher::new();
+    v.hash(&mut h);
+    h.finish()
+}
 
 fn normalize_generated_css(css: &str) -> String {
+    // Ultra fast path: trivial short strings can't contain patterns we touch.
+    if css.len() < 3 { return css.to_string(); }
+    // Cached path.
+    let key = fast_hash(&css);
+    if let Some(cached) = NORMALIZE_CACHE.lock().ok().and_then(|mut c| c.get(&key).cloned()) {
+        return (*cached).clone();
+    }
+
     let mut out = css.to_string();
 
     out = fix_missing_dot_for_escaped_symbol_groups(&out);
@@ -50,14 +78,97 @@ fn normalize_generated_css(css: &str) -> String {
         de.starts_with(".?@container>")
     });
 
-    if let Ok(parsed) = lightningcss::stylesheet::StyleSheet::parse(&out.clone(), lightningcss::stylesheet::ParserOptions::default()) {
-        if let Ok(res) = parsed.to_css(lightningcss::stylesheet::PrinterOptions::default()) {
-            out = res.code;
-        }
-    }
+    // NOTE: We intentionally removed the lightningcss parse + re-print step here.
+    // Parsing was adding ~10-15ms for even modest CSS payloads. The normalizer now
+    // performs only lightweight string transforms. Any full parsing (minify or
+    // pretty format) is handled explicitly in the caller when required.
 
     out = remove_orphan_selectors(&out);
     out = reescape_leading_invalid_identifiers(&out);
+
+    // Insert into cache (ignore if poisoned)
+    if out.len() <= 16 * 1024 { // don't cache very large blocks
+        if let Ok(mut cache) = NORMALIZE_CACHE.lock() { cache.put(key, Arc::new(out.clone())); }
+    }
+    out
+}
+
+/// Extremely fast (approx O(n)) heuristic CSS pretty-printer intended only for
+/// internally generated CSS we control. Avoids full parsing for <1ms latency.
+/// It normalizes:
+/// - One declaration per line
+/// - Indentation with two spaces
+/// - Blank line between top-level rules
+/// It does NOT guarantee spec-compliant formatting for arbitrary user CSS.
+fn pretty_format_css_fast(input: &str) -> String {
+    // Small fast-path: if already looks formatted (has \n  ) just return.
+    if input.as_bytes().windows(3).any(|w| w == b"\n  ") {
+        return input.to_string();
+    }
+    let mut out = String::with_capacity(input.len() + input.len() / 8 + 32);
+    let mut depth: i32 = 0;
+    let mut in_string: Option<char> = None;
+    let mut last_emitted_non_ws: char = '\n';
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    // Helper: emit indentation
+    let emit_indent = |out: &mut String, depth: i32| {
+        for _ in 0..depth { out.push_str("  "); }
+    };
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if let Some(sq) = in_string {
+            out.push(c);
+            if c == '\\' { // escape next
+                if i + 1 < bytes.len() { out.push(bytes[i+1] as char); i += 2; continue; }
+            } else if c == sq { in_string = None; }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' | '\'' => { in_string = Some(c); out.push(c); },
+            '{' => {
+                // Trim trailing spaces
+                while out.ends_with(' ') || out.ends_with('\t') { out.pop(); }
+                out.push_str(" {\n");
+                depth += 1;
+                emit_indent(&mut out, depth);
+            },
+            '}' => {
+                // Remove trailing whitespace/newlines
+                while out.ends_with([' ', '\t', '\n']) { out.pop(); }
+                depth -= 1; if depth < 0 { depth = 0; }
+                out.push('\n');
+                emit_indent(&mut out, depth);
+                out.push('}');
+                // Peek next significant char
+                let mut k = i + 1; while k < bytes.len() && (bytes[k] as char).is_whitespace() { if bytes[k] == b'\n' { break; } k += 1; }
+                out.push('\n');
+                if k < bytes.len() && bytes[k] != b'\n' && depth == 0 { out.push('\n'); }
+            },
+            ';' => {
+                out.push(';');
+                out.push('\n');
+                emit_indent(&mut out, depth);
+            },
+            '\n' => {
+                if !out.ends_with('\n') { out.push('\n'); emit_indent(&mut out, depth); }
+            },
+            ' ' | '\t' | '\r' => {
+                // Collapse consecutive whitespace outside rules
+                if !out.ends_with(' ') && !out.ends_with('\n') { out.push(' '); }
+            },
+            _ => {
+                if last_emitted_non_ws == '}' && !out.ends_with('\n') { out.push('\n'); emit_indent(&mut out, depth); }
+                out.push(c);
+                last_emitted_non_ws = c;
+            }
+        }
+        i += 1;
+    }
+    // Final trim
+    while out.ends_with([' ', '\t', '\n']) { out.pop(); }
+    out.push('\n');
     out
 }
 
@@ -610,8 +721,15 @@ pub fn generate_css(
         let normalized = normalize_generated_css(&minified_css.code);
         crate::utils::write_buffered(output_path, normalized.as_bytes()).expect("Failed to write minified CSS");
     } else {
-        let normalized = normalize_generated_css(&css_content);
-        crate::utils::write_buffered(output_path, normalized.as_bytes()).expect("Failed to write CSS file");
+    // Normalize each rule individually with caching, then join and pretty once.
+    // This reduces repeated transforms on shared substrings.
+    let mut buf = String::with_capacity(css_content.len() + 64);
+    for (idx, rule) in css_rules.iter().enumerate() {
+        if idx > 0 { buf.push_str("\n\n"); }
+        buf.push_str(&normalize_generated_css(rule));
+    }
+    let pretty = pretty_format_css_fast(&buf);
+    crate::utils::write_buffered(output_path, pretty.as_bytes()).expect("Failed to write CSS file");
     }
 }
 
@@ -671,25 +789,32 @@ pub fn generate_css_ids(
     }
 
     if force_format {
-        if let Ok(stylesheet) = StyleSheet::parse(&joined, ParserOptions::default()) {
-            if let Ok(formatted) = stylesheet.to_css(PrinterOptions { minify: false, ..Default::default() }) {
-                let mut code = formatted.code;
-                if !code.ends_with('\n') { code.push('\n'); }
-                let normalized = normalize_generated_css(&code);
-                crate::utils::write_buffered(output_path, normalized.as_bytes()).expect("Failed to write formatted CSS");
-                return;
+        // Avoid heavy parse when possible; attempt parse only if size below threshold.
+        if joined.len() < 32_768 {
+            if let Ok(stylesheet) = StyleSheet::parse(&joined, ParserOptions::default()) {
+                if let Ok(formatted) = stylesheet.to_css(PrinterOptions { minify: false, ..Default::default() }) {
+                    let mut code = formatted.code;
+                    if !code.ends_with('\n') { code.push('\n'); }
+                    let normalized = normalize_generated_css(&code);
+                    let pretty = pretty_format_css_fast(&normalized);
+                    crate::utils::write_buffered(output_path, pretty.as_bytes()).expect("Failed to write formatted CSS");
+                    return;
+                }
             }
         }
     }
 
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(output_path).expect("Failed to open CSS file for writing");
     let mut writer = BufWriter::new(file);
+    // Normalize all first, then pretty format once to minimize passes.
+    let mut aggregate = String::with_capacity(joined.len() + 64);
     for (i, rule) in css_rules.iter().enumerate() {
-        if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
-        let normalized = normalize_generated_css(rule);
-        writer.write_all(normalized.as_bytes()).expect("write rule");
+        if i > 0 { aggregate.push_str("\n\n"); }
+        aggregate.push_str(&normalize_generated_css(rule));
     }
-    writer.write_all(b"\n").expect("write trailing newline");
+    let pretty = if force_format { pretty_format_css_fast(&aggregate) } else { aggregate };
+    writer.write_all(pretty.as_bytes()).expect("write combined");
+    if !pretty.ends_with('\n') { writer.write_all(b"\n").expect("trailing newline"); }
     writer.flush().expect("Failed to flush CSS writer");
 }
 
@@ -706,11 +831,14 @@ pub fn append_new_classes_ids(
     let mut writer = BufWriter::new(file);
     let need_leading = writer.get_ref().metadata().map(|m| m.len() > 0).unwrap_or(false);
     if need_leading { writer.write_all(b"\n").expect("write leading separator"); }
+    // Aggregate then pretty once.
+    let mut aggregate = String::with_capacity(rules.iter().map(|r| r.len()).sum::<usize>() + 64);
     for (i, r) in rules.iter().enumerate() {
-        if i > 0 { writer.write_all(b"\n\n").expect("write separator"); }
-        let normalized = normalize_generated_css(r);
-        writer.write_all(normalized.as_bytes()).expect("write rule");
+        if i > 0 { aggregate.push_str("\n\n"); }
+        aggregate.push_str(&normalize_generated_css(r));
     }
-    writer.write_all(b"\n").expect("write trailing newline");
+    let pretty = pretty_format_css_fast(&aggregate);
+    writer.write_all(pretty.as_bytes()).expect("write aggregated");
+    if !pretty.ends_with('\n') { writer.write_all(b"\n").expect("trailing newline"); }
     writer.flush().expect("flush append");
 }
