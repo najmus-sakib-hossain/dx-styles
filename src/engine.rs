@@ -1,10 +1,7 @@
-use lru::LruCache;
+use std::sync::RwLock;
 use std::collections::HashMap;
 use smallvec::SmallVec;
-use rayon::prelude::*;
 use std::fs;
-use std::num::NonZeroUsize;
-use std::sync::{Mutex, RwLock};
 use std::sync::Arc;
 use cssparser::serialize_identifier;
 use std::fmt;
@@ -40,7 +37,6 @@ pub struct StyleEngine {
     container_queries: HashMap<String, String>,
     colors: HashMap<String, String>,
     _animation_templates: HashMap<String, String>,
-    css_cache: Mutex<LruCache<u32, Arc<String>>>,
     precomputed: RwLock<Option<Arc<Vec<Option<Arc<String>>>>>>,
 }
 
@@ -130,7 +126,6 @@ impl StyleEngine {
             container_queries,
             colors,
             _animation_templates,
-            css_cache: Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())),
             precomputed: RwLock::new(None),
         })
     }
@@ -152,43 +147,6 @@ impl StyleEngine {
         let arc = Arc::new(vec);
         let mut w = self.precomputed.write().unwrap();
         *w = Some(arc);
-    }
-
-    pub fn ensure_prewarm(&self, interner: &crate::interner::ClassInterner) {
-        let current_len_opt = {
-            let r = self.precomputed.read().unwrap();
-            match &*r { Some(pre) => Some(pre.len()), None => None }
-        };
-        match current_len_opt {
-            None => {
-                self.prewarm(interner);
-            }
-            Some(existing) => {
-                let target = interner.len();
-                if target > existing {
-                    let mut w = self.precomputed.write().unwrap();
-                    if let Some(pre_arc) = &mut *w {
-                        let current_len = pre_arc.len();
-                        if current_len < target {
-                            let vec_mut = Arc::make_mut(pre_arc);
-                            for id in current_len..target {
-                                let id_u32 = id as u32;
-                                let raw = interner.get(id_u32);
-                                let esc = interner.escaped(id_u32);
-                                if let Some(css) = self.compute_css_from_raw_and_escaped(raw, esc) {
-                                    vec_mut.push(Some(Arc::new(css)));
-                                } else {
-                                    vec_mut.push(None);
-                                }
-                            }
-                        }
-                    } else {
-                        drop(w);
-                        self.prewarm(interner);
-                    }
-                }
-            }
-        }
     }
 
     fn compute_css(&self, class_name: &str) -> Option<String> {
@@ -553,62 +511,6 @@ impl StyleEngine {
             if let Some(css) = self.compute_css(name) { out.push(css); }
         }
         out
-    }
-
-    pub fn generate_css_for_ids(&self, ids: &[u32], interner: &crate::interner::ClassInterner) -> Vec<Arc<String>> {
-        {
-            let r = self.precomputed.read().unwrap();
-            if r.is_some() {
-                let max_id = ids.iter().copied().max();
-                if let (Some(pre), Some(max_id)) = (r.as_ref(), max_id) {
-                    if (max_id as usize) >= pre.len() { drop(r); self.ensure_prewarm(interner); }
-                }
-            }
-        }
-        if let Some(pre) = self.precomputed.read().unwrap().as_ref() {
-            let mut out: Vec<Arc<String>> = Vec::with_capacity(ids.len());
-            for &id in ids {
-                let idx = id as usize;
-                if idx < pre.len() { if let Some(a) = &pre[idx] { out.push(Arc::clone(a)); } }
-            }
-            return out;
-        }
-
-        let mut result_slots: Vec<Option<Arc<String>>> = vec![None; ids.len()];
-        let mut misses: Vec<(usize, u32)> = Vec::new();
-
-        {
-            let mut cache = self.css_cache.lock().unwrap();
-            for (idx, &id) in ids.iter().enumerate() {
-                if let Some(c) = cache.get(&id) {
-                    result_slots[idx] = Some(Arc::clone(c));
-                } else {
-                    misses.push((idx, id));
-                }
-            }
-        }
-
-        if !misses.is_empty() {
-            let miss_sources: Vec<(usize, u32, String, String)> = misses
-                .iter()
-                .map(|(idx, id)| (*idx, *id, interner.get(*id).to_string(), interner.escaped(*id).to_string()))
-                .collect();
-
-            let computed: Vec<(usize, Arc<String>)> = miss_sources
-                .into_par_iter()
-                .filter_map(|(idx, _id, raw, esc)| {
-                    self.compute_css_from_raw_and_escaped(&raw, &esc).map(|css| (idx, Arc::new(css)))
-                })
-                .collect();
-
-            let mut cache = self.css_cache.lock().unwrap();
-            for (idx, css_arc) in &computed {
-                cache.put(ids[*idx], Arc::clone(css_arc));
-                result_slots[*idx] = Some(Arc::clone(css_arc));
-            }
-        }
-
-        result_slots.into_iter().filter_map(|opt| opt).collect()
     }
 
     fn generate_dynamic_css(&self, class_name: &str) -> Option<String> {

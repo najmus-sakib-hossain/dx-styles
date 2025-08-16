@@ -56,7 +56,7 @@ pub fn process_file_change(
 
     if added_file > 0 || removed_file > 0 || added_global > 0 || removed_global > 0 {
         utils::log_change(
-            "✔",
+            "✓",
             path,
             added_file,
             removed_file,
@@ -67,7 +67,7 @@ pub fn process_file_change(
         );
     } else {
         // Still provide a lightweight notice so user sees that watcher reacted.
-        println!("✔ {} (no class changes)", path.display());
+        println!("✓ {} (no class changes)", path.display());
     }
 }
 
