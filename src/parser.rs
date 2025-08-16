@@ -327,6 +327,13 @@ impl ClassNameVisitor {
                                 .push(format!("gradient:mesh:{}", colors.join("+")));
                         }
                     }
+                } else if ident == "transition" {
+                    // Treat transition(duration) as a simple standalone utility token.
+                    ensure(&mut pending);
+                    if let Some(c) = &mut pending {
+                        let duration = inner_tokens.get(0).cloned().unwrap_or_else(|| "150ms".to_string());
+                        c.base.push(format!("transition({})", duration));
+                    }
                 } else if ident.starts_with('$') {
                     if !inner_tokens.is_empty() {
                         let cname = &ident[1..];

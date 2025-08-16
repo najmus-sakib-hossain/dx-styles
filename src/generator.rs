@@ -28,6 +28,22 @@ fn fast_hash<T: Hash>(v: &T) -> u64 {
     h.finish()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::normalize_generated_css;
+
+    #[test]
+    fn escaped_greater_than_not_treated_as_combinator() {
+        let input = ".\\?@self\\:child-count\\>2\\(_highlight\\) {\n  color: red;\n}\n";
+        let out = normalize_generated_css(input);
+        // Should preserve the escaped ">" without inserting surrounding spaces
+        assert!(out.contains(".\\?@self\\:child-count\\>2\\(_highlight\\) {"), "output selector altered: {}", out);
+        // Ensure no pattern with space around escaped '>'
+        assert!(!out.contains("child-count\\ >"), "unexpected space before escaped >: {}", out);
+        assert!(!out.contains("\\> 2"), "unexpected space after escaped >: {}", out);
+    }
+}
+
 fn normalize_generated_css(css: &str) -> String {
     // Ultra fast path: trivial short strings can't contain patterns we touch.
     if css.len() < 3 { return css.to_string(); }
@@ -81,6 +97,37 @@ fn normalize_generated_css(css: &str) -> String {
     out = reescape_leading_invalid_identifiers(&out);
     out = normalize_child_combinator_spacing(&out);
     out = remove_empty_rules(&out);
+    // Post-process animation shorthand to strip stray stage tokens (from(...)/to(...)/via(...)) and duplicate fill modes.
+    if out.contains("animation:") {
+        let mut cleaned = String::with_capacity(out.len());
+        for line in out.lines() {
+            if let Some(idx) = line.find("animation:") {
+                // naive parse until ';'
+                let (prefix, rest) = line.split_at(idx);
+                let mut value_part = rest[10..].trim(); // after 'animation:'
+                // Keep everything until ';'
+                if let Some(semi) = value_part.find(';') { value_part = &value_part[..semi]; }
+                let mut tokens: Vec<&str> = value_part.split_whitespace().collect();
+                let mut filtered: Vec<&str> = Vec::with_capacity(tokens.len());
+                let mut seen_fill = false;
+                for t in tokens.drain(..) {
+                    if t.starts_with("from(") || t.starts_with("to(") || t.starts_with("via(") { continue; }
+                    if t == "forwards" { if seen_fill { continue; } seen_fill = true; }
+                    filtered.push(t);
+                }
+                let mut rebuilt = String::new();
+                rebuilt.push_str(prefix);
+                rebuilt.push_str("animation: ");
+                rebuilt.push_str(&filtered.join(" "));
+                rebuilt.push(';');
+                cleaned.push_str(&rebuilt);
+                cleaned.push('\n');
+            } else {
+                cleaned.push_str(line); cleaned.push('\n');
+            }
+        }
+        out = cleaned;
+    }
 
     // Insert into cache (ignore if poisoned)
     if out.len() <= 16 * 1024 { // don't cache very large blocks
@@ -140,6 +187,13 @@ fn normalize_child_combinator_spacing(input: &str) -> String {
             '{' => { depth += 1; out.push(c); i += 1; },
             '}' => { if depth > 0 { depth -= 1; } out.push(c); i += 1; },
             '>' if depth == 0 => {
+                // If the '>' is escaped (previous emitted char is '\\') then it is part of a class
+                // name (e.g. .\?@container\>640px...) and we must not treat it as a combinator.
+                if out.ends_with('\\') {
+                    out.push('>');
+                    i += 1;
+                    continue;
+                }
                 // Normalize spacing around child combinator
                 // Remove any trailing spaces just to re-insert single spacing consistently
                 while out.ends_with(' ') { out.pop(); }
@@ -872,21 +926,24 @@ pub fn generate_css_ids(
     output_path: &Path,
     engine: &StyleEngine,
     interner: &ClassInterner,
-    _force_format: bool, // kept for backward compatibility; ignored in dev per requirements
+    _force_format: bool,
 ) {
-    let mut sorted: Vec<u32> = class_ids.iter().cloned().collect();
+    // Switch to batch string-based generation so animation chains spanning multiple classes
+    // (animate: + from()/to()/via()/forwards) can be consolidated into a single keyframes + rule output.
+    let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
     sorted.sort_unstable();
-    let css_rules: Vec<Arc<String>> = engine.generate_css_for_ids(&sorted, interner);
+    let class_strings: Vec<String> = sorted.iter().map(|id| interner.get(*id).to_string()).collect();
+    let refs: Vec<&str> = class_strings.iter().map(|s| s.as_str()).collect();
+    let css_rule_strings: Vec<String> = engine.generate_css_for_classes_batch(&refs);
 
-    if css_rules.is_empty() {
+    if css_rule_strings.is_empty() {
         crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
         return;
     }
 
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
-    let joined = css_rules.iter().map(|a| a.as_str()).collect::<Vec<_>>().join("\n\n");
-
     if is_production {
+        let joined = css_rule_strings.join("\n\n");
         let stylesheet = StyleSheet::parse(&joined, ParserOptions::default()).expect("Failed to parse CSS");
         let minified_css = stylesheet
             .to_css(PrinterOptions { minify: true, ..Default::default() })
@@ -899,18 +956,14 @@ pub fn generate_css_ids(
         return;
     }
 
-    // Dev: ignore force_format (only format in prod per requirement). Produce deterministic blocks.
-    let mut aggregate = String::with_capacity(joined.len() + 64);
-    for (i, rule) in css_rules.iter().enumerate() {
+    // Dev: no pretty formatting, but normalize structurally.
+    let mut aggregate = String::with_capacity(css_rule_strings.iter().map(|r| r.len()+2).sum());
+    for (i, rule) in css_rule_strings.iter().enumerate() {
         if i > 0 { aggregate.push_str("\n\n"); }
         aggregate.push_str(&normalize_generated_css(rule));
     }
     let aggregate = condense_blank_lines(&aggregate);
-
-    // Skip write if unchanged.
-    if let Ok(existing) = std::fs::read_to_string(output_path) {
-        if existing == aggregate { return; }
-    }
+    if let Ok(existing) = std::fs::read_to_string(output_path) { if existing == aggregate { return; } }
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(output_path).expect("Failed to open CSS file for writing");
     let mut writer = BufWriter::new(file);
     writer.write_all(aggregate.as_bytes()).expect("write combined");

@@ -841,13 +841,21 @@ impl StyleEngine {
             }
             if !kf_body.is_empty() {
                 out.push_str("@keyframes dx-anim-"); out.push_str(&hash); out.push_str(" {\n"); out.push_str(&kf_body); out.push_str("}\n\n");
-                // Build animation shorthand: duration [delay] fillMode keyframesName
+                // Build animation shorthand: duration [delay] [fillMode] name
                 let mut parts: Vec<String> = Vec::new();
                 parts.push(pa.duration.clone());
                 if pa.delay != "0s" { parts.push(pa.delay.clone()); }
                 if !pa.fill_mode.is_empty() { parts.push(pa.fill_mode.clone()); }
                 parts.push(format!("dx-anim-{}", hash));
-                let value = parts.join(" ");
+                // Sanitize: remove any accidental stage tokens or duplicate fill modes
+                let mut filtered: Vec<String> = Vec::new();
+                let mut seen_fill = false;
+                for p in parts.into_iter() {
+                    if p.starts_with("from(") || p.starts_with("to(") || p.starts_with("via(") { continue; }
+                    if p == "forwards" { if seen_fill { continue; } seen_fill = true; }
+                    filtered.push(p);
+                }
+                let value = filtered.join(" ");
                 out.push_str(&build_block(base_selector, &format!("animation: {}", value)));
             }
         }
