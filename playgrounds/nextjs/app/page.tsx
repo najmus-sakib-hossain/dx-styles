@@ -10,9 +10,9 @@ export default function Home() {
       "
     >
       <div className="max-w-5xl mx-auto">
-        
+
         <div className="card(p-13 bg-black/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
-          
+
           <h1 className="text-4xl md:text-5xl ~text(2rem@md, 3rem@xl)">
             Dx Styles Grouping
           </h1>
@@ -25,7 +25,7 @@ export default function Home() {
         <div className="+card(mt-8)">
           <h2 className="text-2xl font-bold mb-4">Container & Conditional Queries</h2>
           <div className="container-type-inline-size resize-x overflow-auto border-2 border-dashed border-gray-400 p-4 w-full min-w-[250px] max-w-full">
-            
+
             <div
               className="
                 p-6 rounded-lg bg-blue-200 text-blue-900 
@@ -45,10 +45,10 @@ export default function Home() {
 
         <div className="+card(mt-8) div(div(mt-4))">
           <h2 className="text-2xl font-bold mb-4">Interactive Features</h2>
-          
+
           <div>
             <h3 className="font-semibold">State Modifiers & Data Attributes</h3>
-            <button 
+            <button
               className="
                 p-4 rounded-lg bg-blue-500 text-white font-bold
                 hover(bg-blue-600 shadow-lg)
@@ -75,13 +75,12 @@ export default function Home() {
           <div>
             <h3 className="font-semibold">Generated Utilities</h3>
             <div className="$focus-ring(outline-none ring-4 ring-offset-2 ring-purple-500)"></div>
-            <input 
-              type="text" 
-              placeholder="Focus me" 
+            <input
+              type="text"
+              placeholder="Focus me"
               className="p-4 border rounded-lg focus($focus-ring)"
             />
           </div>
-
         </div>
       </div>
     </main>

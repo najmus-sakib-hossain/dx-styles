@@ -25,9 +25,11 @@ use crate::composites;
 struct PendingAnimation {
     duration: String,
     delay: String,
+    fill_mode: String,
     from: Vec<String>,
     via: Vec<String>,
     to_: Vec<String>,
+    has_main: bool,
 }
 
 pub struct StyleEngine {
@@ -190,6 +192,10 @@ impl StyleEngine {
     }
 
     fn compute_css(&self, class_name: &str) -> Option<String> {
+        // Skip standalone animation stage utility classes (from(...), to(...), via(...)) so they don't emit empty rules.
+        if class_name.starts_with("from(") || class_name.starts_with("to(") || class_name.starts_with("via(") {
+            return None;
+        }
         let mut last_colon = None;
         for (i, b) in class_name.as_bytes().iter().enumerate() {
             if *b == b':' { last_colon = Some(i); }
@@ -257,6 +263,12 @@ impl StyleEngine {
     }
 
     fn compute_css_from_raw_and_escaped(&self, class_name: &str, escaped: &str) -> Option<String> {
+    if class_name.starts_with("from(") || class_name.starts_with("to(") || class_name.starts_with("via(") { return None; }
+        // Container grouping syntax: ?@container>SIZE(utilA utilB ...)
+        // Required behavior: single rule inside @container with the FULL escaped grouping selector.
+        if class_name.starts_with("?@container>") && class_name.contains('(') && class_name.ends_with(')') {
+            if let Some(block) = self.generate_container_group(class_name, escaped) { return Some(block); }
+        }
         let last_colon = class_name.rfind(':');
         let (prefix_segment, base_class) = if let Some(idx) = last_colon {
             (&class_name[..idx], &class_name[idx + 1..])
@@ -316,6 +328,64 @@ impl StyleEngine {
         })
     }
 
+    // Build aggregated container query block for grouping classes of the form:
+    // ?@container>640px(bg-green-200 text-green-900)
+    // Output:
+    // @container (min-width: 640px) {
+    //   .\?\@container\>640px\(bg-green-200\ text-green-900\) { <merged decls> }
+    // }
+    fn generate_container_group(&self, raw: &str, escaped_selector: &str) -> Option<String> {
+        const PREFIX: &str = "?@container>";
+        let after_prefix = &raw[PREFIX.len()..];
+        let paren_idx = after_prefix.find('(')?;
+        let size_part = after_prefix[..paren_idx].trim();
+        if size_part.is_empty() { return None; }
+        let inner_raw = after_prefix[paren_idx+1..].strip_suffix(')')?;
+        // Normalize size: allow bare number or with px. If user supplies expression keep as-is.
+        let size_expr = if size_part.chars().all(|c| c.is_ascii_digit()) {
+            format!("{}px", size_part)
+        } else if size_part.ends_with("px") || size_part.contains(|c: char| c == ' ' || c == '(' || c == ')') {
+            size_part.to_string()
+        } else {
+            // Assume px if trailing alpha not present
+            size_part.to_string()
+        };
+        // Split utilities inside parentheses by whitespace
+        let inner_utils: Vec<&str> = inner_raw.split(|c: char| c.is_whitespace()).filter(|s| !s.is_empty()).collect();
+        if inner_utils.is_empty() { return None; }
+        use std::collections::HashMap;
+        let mut decls: HashMap<String, (usize, String)> = HashMap::new();
+        let mut order: usize = 0;
+        for util in &inner_utils {
+            if let Some(raw_css) = self.compute_css(util) { // recursive compute existing utility
+                // Extract declarations from first block only
+                if let Some(open) = raw_css.find('{') { if let Some(close) = raw_css.find('}') { if close > open {
+                    let body = &raw_css[open+1..close];
+                    for seg in body.split(';') {
+                        let seg = seg.trim(); if seg.is_empty() { continue; }
+                        if let Some(colon) = seg.find(':') {
+                            let prop = seg[..colon].trim().to_string();
+                            let value = seg[colon+1..].trim().trim_end_matches(';').to_string();
+                            decls.insert(prop, (order, value));
+                            order += 1;
+                        }
+                    }
+                }}}
+            }
+        }
+        if decls.is_empty() { return None; }
+        let mut ordered: Vec<(String, (usize, String))> = decls.into_iter().collect();
+        ordered.sort_by_key(|(_, (ord, _))| *ord);
+        let mut body = String::new();
+        for (prop, (_, val)) in ordered { body.push_str("    "); body.push_str(&prop); body.push_str(": "); body.push_str(&val); body.push_str(";\n"); }
+        let mut out = String::with_capacity(body.len() + escaped_selector.len() + 64);
+        out.push_str("@container (min-width: "); out.push_str(&size_expr); out.push_str(") {\n  .");
+        out.push_str(escaped_selector); out.push_str(" {\n");
+        out.push_str(&body);
+        out.push_str("  }\n}\n");
+        Some(out)
+    }
+
     fn expand_composite(&self, class_name: &str) -> Option<String> {
         // New direct syntax mapping: grouping expressions are stored verbatim.
         // Try direct lookup; if not found fall back to legacy hashed naming.
@@ -329,6 +399,10 @@ impl StyleEngine {
         let resolve_tokens = |tokens: &[String]| -> Vec<String> {
             let mut out = Vec::new();
             for t in tokens {
+                if let Some(rest) = t.strip_prefix("animfill:") { // carry fill mode into animation system via ANIM line
+                    out.push(format!("ANIM|fill|{}", rest));
+                    continue;
+                }
                 if let Some(rest) = t.strip_prefix("fluid:") {
                     let parts: Vec<&str> = rest.split(':').collect();
                     if parts.len() >= 5 { // fluid:prop:min:minBp:max:maxBp
@@ -400,7 +474,14 @@ impl StyleEngine {
         for (state, toks) in &comp.state_rules { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("STATE|{}|{}", state, decls)); } }
         for (attr, toks) in &comp.data_attr_rules { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("DATA|{}|{}", attr, decls)); } }
         for (cond, toks) in &comp.conditional_blocks { let decls = resolve_tokens(toks).join("; "); if !decls.is_empty() { sections.push(format!("COND|{}|{}", cond, decls)); } }
-        for anim in &comp.animations { sections.push(format!("ANIM|{}", anim)); }
+        // Animation lines stored in comp.animations use parser formats:
+        //   animate: utility encoded earlier as base token (animate:duration[:delay]) -> handled via generate_animation_css
+        //   from|token+token  / to|token+token / via|token+token  (stage declarations)
+        //   animfill:forwards stored in base tokens -> already in comp.base as animfill:forwards
+    for anim in &comp.animations {
+            // Prefix with ANIM| <type>|<decls-or-metadata>
+            sections.push(format!("ANIM|{}", anim));
+        }
         for raw in &comp.extra_raw { sections.push(format!("RAW|{}", raw)); }
         if sections.is_empty() { return None; }
         Some(sections.join("\n"))
@@ -528,22 +609,14 @@ impl StyleEngine {
     }
 
     fn generate_animation_css(&self, full_class: &str) -> Option<String> {
-        if !full_class.contains("animate:") { return None; }
-        let parts: Vec<&str> = full_class.split(':').collect();
-        let pos = parts.iter().position(|p| *p == "animate")?;
-        let duration = parts.get(pos + 1).unwrap_or(&"1s");
-        let mut delay = "0s";
-        if let Some(next) = parts.get(pos + 2) {
-            if next.ends_with("ms") || next.ends_with('s') { delay = next; }
-        }
-        let hash = format!("{:x}", seahash::hash(full_class.as_bytes()));
-        if let Some(tpl) = self.animation_templates.get("animate") {
-            let out = tpl.replace("{hash}", &hash)
-                .replace("{value1|1s}", duration)
-                .replace("{value2|0s}", delay);
-            return Some(out.trim_end_matches(';').to_string());
-        }
-        None
+    // Only handle animate:duration[:delay] utility; do not emit frames here (handled during decode).
+    if !full_class.starts_with("animate:") { return None; }
+    let rest = &full_class[8..];
+    let mut parts = rest.split(':');
+    let duration = parts.next().unwrap_or("1s");
+    let delay = parts.next().unwrap_or("0s");
+    // Encode as ANIM|animate|duration|delay so decode stage can consolidate with from()/to()/via()
+    Some(format!("ANIM|animate|{}|{}", duration, delay))
     }
 }
 
@@ -558,7 +631,7 @@ impl StyleEngine {
             return out;
         }
         let mut out = String::new();
-        let mut pending_anim: Option<PendingAnimation> = None;
+    let mut pending_anim: Option<PendingAnimation> = None;
         let lines: Vec<&str> = if css.contains('\n') { css.lines().collect() } else { vec![css] };
         for line in lines {
             if line.is_empty() { continue; }
@@ -605,37 +678,86 @@ impl StyleEngine {
                     }
                 }
             } else if let Some(rest) = line.strip_prefix("ANIM|") {
-                // Formats: animate|duration|delay OR stage|from|decls / stage|to|decls / stage|via|decls
+                // Formats after parser/composite:
+                //   ANIM|animate|duration|delay
+                //   ANIM|from|token+token
+                //   ANIM|to|token+token
+                //   ANIM|via|token+token
                 let parts: Vec<&str> = rest.split('|').collect();
-                if parts.get(0)==Some(&"animate") {
-                    let duration_val = parts.get(1).copied().unwrap_or("1s").to_string();
-                    let delay_val = parts.get(2).copied().unwrap_or("0s").to_string();
-                    let pa = pending_anim.get_or_insert(PendingAnimation{ duration: duration_val.clone(), delay: delay_val.clone(), from:Vec::new(), via:Vec::new(), to_:Vec::new() });
-                    pa.duration = duration_val; pa.delay = delay_val;
-                } else if parts.len() >= 2 {
-                    let stage = parts[0];
-                    let decls = parts[1];
-                    let pa = pending_anim.get_or_insert(PendingAnimation{ duration: "1s".into(), delay: "0s".into(), from:Vec::new(), via:Vec::new(), to_:Vec::new() });
-                    match stage { "from" => pa.from.push(decls.to_string()), "to" => pa.to_.push(decls.to_string()), "via" => pa.via.push(decls.to_string()), _=>{} }
+                if parts.is_empty() { continue; }
+                match parts[0] {
+                    "animate" => {
+                        let duration_val = parts.get(1).copied().unwrap_or("1s").to_string();
+                        let delay_val = parts.get(2).copied().unwrap_or("0s").to_string();
+                        let pa = pending_anim.get_or_insert(PendingAnimation{ duration: duration_val.clone(), delay: delay_val.clone(), fill_mode: String::new(), from:Vec::new(), via:Vec::new(), to_:Vec::new(), has_main: true });
+                        pa.duration = duration_val; pa.delay = delay_val; pa.has_main = true;
+                    }
+                    "fill" => {
+                        if let Some(mode) = parts.get(1) {
+                            let pa = pending_anim.get_or_insert(PendingAnimation{ duration: "1s".into(), delay: "0s".into(), fill_mode: String::new(), from:Vec::new(), via:Vec::new(), to_:Vec::new(), has_main: false });
+                            pa.fill_mode = (*mode).to_string();
+                        }
+                    }
+                    "from" | "to" | "via" => {
+                        if let Some(tokens) = parts.get(1) {
+                            let pa = pending_anim.get_or_insert(PendingAnimation{ duration: "1s".into(), delay: "0s".into(), fill_mode:String::new(), from:Vec::new(), via:Vec::new(), to_:Vec::new(), has_main: false });
+                            match parts[0] { "from" => pa.from.push((*tokens).to_string()), "to" => pa.to_.push((*tokens).to_string()), "via" => pa.via.push((*tokens).to_string()), _=>{} }
+                        }
+                    }
+                    _ => {}
                 }
             } else if let Some(raw) = line.strip_prefix("RAW|") {
                 out.push_str(raw); if !raw.ends_with('\n') { out.push('\n'); }
             }
         }
         if let Some(pa) = pending_anim.take() {
-            // Consolidate frames
+            // If no animate: utility was present (only stages), skip emitting keyframes/animation to avoid empty rulesets.
+            if !pa.has_main { if out.ends_with('\n') { out.pop(); } return out; }
+            // Consolidate frames into single keyframes per requirements.
             let hash = format!("{:x}", seahash::hash(selector.as_bytes()));
             let mut frames: Vec<(u32,String)> = Vec::new();
-            if !pa.from.is_empty() { frames.push((0, pa.from.join("; "))); }
-            if !pa.via.is_empty() { let count = pa.via.len(); for (i,v) in pa.via.iter().enumerate() { let pct = ((i+1) as f32)/((count+1) as f32)*100.0; frames.push((pct as u32, v.clone())); } }
-            if !pa.to_.is_empty() { frames.push((100, pa.to_.join("; "))); }
-            frames.sort_by_key(|(p,_)| *p);
-            let mut kf = String::new(); kf.push_str("@keyframes dx-keyframe-"); kf.push_str(&hash); kf.push_str(" {\n");
+            if !pa.from.is_empty() { frames.push((0, self.resolve_animation_tokens(&pa.from))); }
+            if !pa.to_.is_empty() { frames.push((100, self.resolve_animation_tokens(&pa.to_))); }
+            // Insert via stages evenly spaced if present
+            if !pa.via.is_empty() {
+                let count = pa.via.len();
+                for (i, v) in pa.via.iter().enumerate() {
+                    let pct = ((i + 1) as f32) / ((count + 1) as f32) * 100.0;
+                    frames.push((pct as u32, self.resolve_animation_tokens(&[v.clone()] )));
+                }
+            }
+            frames.sort_by_key(|(p, _)| *p);
+            let mut kf = String::new();
+            kf.push_str("@keyframes dx-anim-");
+            kf.push_str(&hash);
+            kf.push_str(" {\n");
             for (pct, decls) in frames { kf.push_str(&format!("  {}% {{ {} }}\n", pct, decls)); }
-            kf.push_str("}\n\n"); out.push_str(&kf);
-            out.push_str(&build_block(selector, &format!("animation: dx-keyframe-{} {} {} both", hash, pa.duration, pa.delay)));
+            kf.push_str("}\n\n");
+            out.push_str(&kf);
+            // Apply animation to the selector itself: animation: <duration> <delay> both dx-anim-hash
+            let fill = if pa.fill_mode.is_empty() { "both" } else { pa.fill_mode.as_str() };
+            out.push_str(&build_block(selector, &format!("animation: {} {} {} dx-anim-{}", pa.duration, pa.delay, fill, hash)));
         }
         if out.ends_with('\n') { out.pop(); }
+        out
+    }
+
+    // Resolve animation stage tokens (like opacity-0, translate-y-4) into declarations using existing generation paths.
+    fn resolve_animation_tokens(&self, tokens: &[String]) -> String {
+        let mut decls: Vec<String> = Vec::new();
+        for t in tokens {
+            for piece in t.split('+') {
+                let piece = piece.trim(); if piece.is_empty() { continue; }
+                if let Some(css) = self.precompiled.get(piece) { decls.push(css.clone()); continue; }
+                if let Some(c) = self.generate_color_css(piece) { decls.push(c); continue; }
+                if let Some(d) = self.generate_dynamic_css(piece) { decls.push(d); continue; }
+            }
+        }
+        // Deduplicate later properties by name
+        let mut last_for: HashMap<&str, usize> = HashMap::new();
+        for (i, d) in decls.iter().enumerate() { if let Some(idx) = d.find(':') { let name = d[..idx].trim(); last_for.insert(name, i); } }
+        let mut out = String::new();
+        for (i, d) in decls.iter().enumerate() { if let Some(idx) = d.find(':') { let name = d[..idx].trim(); if last_for.get(name) == Some(&i) { if !out.is_empty() { out.push_str("; "); } out.push_str(d.trim().trim_end_matches(';')); } } }
         out
     }
 

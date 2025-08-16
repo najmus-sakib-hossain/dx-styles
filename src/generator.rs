@@ -69,14 +69,8 @@ fn normalize_generated_css(css: &str) -> String {
         })
     });
 
-    out = strip_top_level_container_rules(&out);
-    out = expand_container_group_selectors(&out);
-    out = remove_selector_blocks(&out, |sel| {
-        let mut de = String::with_capacity(sel.len());
-        let mut it = sel.chars().peekable();
-        while let Some(c) = it.next() { if c == '\\' { if let Some(n) = it.next() { de.push(n); } } else { de.push(c); } }
-        de.starts_with(".?@container>")
-    });
+    // Removed legacy container grouping expansion passes. New engine path emits
+    // a single @container block with the fully escaped original grouping selector.
 
     // NOTE: We intentionally removed the lightningcss parse + re-print step here.
     // Parsing was adding ~10-15ms for even modest CSS payloads. The normalizer now
@@ -86,10 +80,48 @@ fn normalize_generated_css(css: &str) -> String {
     out = remove_orphan_selectors(&out);
     out = reescape_leading_invalid_identifiers(&out);
     out = normalize_child_combinator_spacing(&out);
+    out = remove_empty_rules(&out);
 
     // Insert into cache (ignore if poisoned)
     if out.len() <= 16 * 1024 { // don't cache very large blocks
         if let Ok(mut cache) = NORMALIZE_CACHE.lock() { cache.put(key, Arc::new(out.clone())); }
+    }
+    out
+}
+
+// Remove any empty rulesets like `.foo { }` or `.bar{\n}` that linger after transformations.
+fn remove_empty_rules(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+    let mut out = String::with_capacity(input.len());
+    while i < bytes.len() {
+        let start = i;
+        // Look for selector start (rough heuristic: begins with dot at line start or after newline)
+        if bytes[i] == b'.' {
+            // Scan forward to first '{'
+            let mut j = i;
+            let mut brace = None;
+            while j < bytes.len() {
+                if bytes[j] == b'{' { brace = Some(j); break; }
+                if bytes[j] == b'\n' { break; }
+                j += 1;
+            }
+            if let Some(bpos) = brace {
+                // From bpos+1 scan whitespace/comments until '}'
+                let mut k = bpos + 1;
+                while k < bytes.len() && (bytes[k] as char).is_ascii_whitespace() { k += 1; }
+                if k < bytes.len() && bytes[k] == b'}' {
+                    // Empty block detected; skip it (and trailing newlines)
+                    k += 1;
+                    while k < bytes.len() && (bytes[k] as char).is_ascii_whitespace() { if bytes[k] == b'\n' { k += 1; break; } k += 1; }
+                    i = k;
+                    continue;
+                }
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+        if start == i { break; }
     }
     out
 }

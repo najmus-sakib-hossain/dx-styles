@@ -55,9 +55,11 @@ impl ClassNameVisitor {
     let mut pending: Option<Composite> = None;
         let mut local_components: HashMap<String, Vec<String>> = HashMap::new();
         let ensure = |pending: &mut Option<Composite>| { if pending.is_none() { *pending = Some(Composite::default()); } };
-        let mut i = 0usize;
-        let bytes = raw.as_bytes();
-        while i < bytes.len() {
+    let mut i = 0usize;
+    let bytes = raw.as_bytes();
+    let mut animate_mode = false; // inside animate chain (animate:... followed by from()/to()/via()/forwards)
+    let mut animate_group_start: Option<usize> = None;
+    while i < bytes.len() {
             while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
             if i >= bytes.len() { break; }
             let start = i;
@@ -190,12 +192,17 @@ impl ClassNameVisitor {
                     let cname = ident.trim_start_matches('_');
                     local_components.entry(cname.to_string()).or_insert(inner_tokens.clone());
                     ensure(&mut pending);
-                } else if ident == "from" || ident == "to" || ident == "via" {
+        } else if ident == "from" || ident == "to" || ident == "via" {
                     ensure(&mut pending);
                     if let Some(c) = &mut pending {
                         let stage = ident.to_string();
-                        let line = format!("animstage|{}|{}", stage, inner_tokens.join("+"));
+                        // Store animation stage lines in the simplified format expected by the decoder:
+                        //   from|prop-token+prop-token
+                        // The engine will later resolve each prop token to real declarations and
+                        // consolidate them into @keyframes.
+                        let line = format!("{}|{}", stage, inner_tokens.join("+"));
                         c.animations.push(line);
+            if !animate_mode { /* stage without animate: prefix; treat as independent grouping */ }
                     }
                 } else if ident == "motion" {
                     ensure(&mut pending);
@@ -209,8 +216,11 @@ impl ClassNameVisitor {
                     if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
                 }
 
-                // Per-group finalization: emit a composite for this grouping expression now.
-                if let Some(mut c_emit) = pending.take() {
+                // Decide whether to finalize grouping now. If we're inside an animate chain, we delay finalization
+                // until the chain ends (non-stage token without parentheses or end of input).
+                let is_stage = ident == "from" || ident == "to" || ident == "via";
+                let should_finalize = if animate_mode { false } else { true };
+                if should_finalize { if let Some(mut c_emit) = pending.take() {
                     let expand_component_tokens = |tokens: &mut Vec<String>| {
                         let mut expanded: Vec<String> = Vec::new();
                         for t in tokens.iter() {
@@ -230,9 +240,11 @@ impl ClassNameVisitor {
                     for (_, toks) in c_emit.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
                     for (_, toks) in c_emit.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
                     expand_component_tokens(&mut c_emit.base);
-                    let class_name = composites::register_grouping_raw(raw[start..i].trim(), c_emit);
+                    let slice_start = animate_group_start.unwrap_or(start);
+                    let class_name = composites::register_grouping_raw(raw[slice_start..i].trim(), c_emit);
                     out.push(class_name);
-                }
+                    animate_group_start = None;
+                } }
             } else {
                 if ident.starts_with('_') {
                     ensure(&mut pending);
@@ -241,12 +253,49 @@ impl ClassNameVisitor {
                     else if let Some(global) = self.components.get(cname) { if let Some(c)= &mut pending { c.base.extend(global.clone()); } }
                 } else if ident == "forwards" {
                     ensure(&mut pending); if let Some(c)= &mut pending { c.base.push("animfill:forwards".to_string()); }
+                    if animate_mode { /* still inside animate chain */ } 
                 } else if let Some(list) = self.components.get(ident) { ensure(&mut pending); if let Some(c)= &mut pending { c.base.extend(list.iter().cloned()); } }
-                else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); } }
+                else { ensure(&mut pending); if let Some(c)= &mut pending { c.base.push(ident.to_string()); if ident.starts_with("animate:") { animate_mode = true; animate_group_start = Some(start); } else if animate_mode { // animate chain ended by encountering non-stage token
+                        animate_mode = false; }
+                    } }
+                // When animate chain ends due to plain token, finalize pending composite if it has animation stages.
+                if !animate_mode {
+                    if let Some(c) = &pending { if !c.animations.is_empty() { if let Some(mut emit) = pending.take() {
+                        let expand_component_tokens = |tokens: &mut Vec<String>| {
+                            let mut expanded: Vec<String> = Vec::new();
+                            for t in tokens.iter() {
+                                if let Some(name) = t.strip_prefix('$') {
+                                    if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                                    if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                                } else if let Some(name) = t.strip_prefix('_') {
+                                    if let Some(base) = local_components.get(name) { expanded.extend(base.clone()); continue; }
+                                    if let Some(base) = self.components.get(name) { expanded.extend(base.clone()); continue; }
+                                }
+                                expanded.push(t.clone());
+                            }
+                            *tokens = expanded;
+                        };
+                        for (_, toks) in emit.state_rules.iter_mut() { expand_component_tokens(toks); }
+                        for (_, toks) in emit.child_rules.iter_mut() { expand_component_tokens(toks); }
+                        for (_, toks) in emit.data_attr_rules.iter_mut() { expand_component_tokens(toks); }
+                        for (_, toks) in emit.conditional_blocks.iter_mut() { expand_component_tokens(toks); }
+                        expand_component_tokens(&mut emit.base);
+                        let slice_start = animate_group_start.unwrap_or(start);
+                        let class_name = composites::register_grouping_raw(raw[slice_start..i].trim(), emit);
+                        out.push(class_name);
+                        animate_group_start = None;
+                    } }
+                }
             }
         }
-        if let Some(c) = pending { // trailing simple utilities collected
-            out.extend(c.base);
+        if let Some(c) = pending { // finalize trailing
+            if !c.animations.is_empty() {
+                let slice_start = animate_group_start.unwrap_or(0);
+                let class_name = composites::register_grouping_raw(raw[slice_start..].trim(), c);
+                out.push(class_name);
+            } else {
+                out.extend(c.base);
+            }
         }
         out
     }
