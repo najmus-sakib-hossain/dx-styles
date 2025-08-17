@@ -2,13 +2,10 @@ use crate::{
     cache::ClassnameCache, data_manager, engine::StyleEngine, generator, interner::ClassInterner,
     parser, utils,
 };
-use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
-    time::{Duration, Instant},
 };
 
 // Flag to indicate that we're in fast-path processing mode
@@ -55,7 +52,7 @@ pub fn process_file_remove(
 
     // Fast-path: just update in-memory data structures
     let empty_ids = HashSet::new();
-    let (a_f, r_f, a_g, r_g, added_global, removed_global) = data_manager::update_class_maps_ids(
+    let (_a_f, _r_f, a_g, r_g, _added_global, _removed_global) = data_manager::update_class_maps_ids(
         path,
         &empty_ids,
         file_classnames_ids,
@@ -164,7 +161,7 @@ pub fn process_file_change(
 
     // Convert back to strings for cache
     let update_start = Instant::now();
-    let (a_f, r_f, a_g, r_g, _added_global, _removed_global) = data_manager::update_class_maps_ids(
+    let (_a_f, _r_f, a_g, r_g, _added_global, _removed_global) = data_manager::update_class_maps_ids(
         path,
         &ids,
         file_classnames_ids,
@@ -222,7 +219,7 @@ pub fn process_file_change(
 
 // Optimized function to check if a file needs processing
 pub fn needs_processing(
-    path: &Path,
+    _path: &Path,
     content_hash: u64,
     class_hash: u64,
     last_content_hash: Option<u64>,
@@ -244,6 +241,9 @@ pub fn needs_processing(
         return true;
     }
 
+    // No significant changes
+    false
+}
     // No significant changes
     false
 }

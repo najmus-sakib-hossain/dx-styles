@@ -44,9 +44,6 @@ static PATH_CONTENT_CACHE: Lazy<RwLock<HashMap<PathBuf, (u64, u64)>>> =
 // Last successful CSS generation timestamp
 static LAST_GENERATION_TIME: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
-// Frequently used empty string constant to avoid allocations
-static EMPTY_STRING: Lazy<Arc<String>> = Lazy::new(|| Arc::new(String::new()));
-
 // New cache for tracking specific class changes
 static CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -54,17 +51,6 @@ static CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> =
 // IDs tracking for optimization
 static LAST_IDS_HASH: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 static LAST_IDS_COUNT: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(usize::MAX));
-
-// Pre-computed CSS templates for common patterns
-static CSS_TEMPLATES: Lazy<RwLock<HashMap<&'static str, Arc<String>>>> = 
-    Lazy::new(|| {
-        let mut map = HashMap::new();
-        map.insert("flex", Arc::new(".flex { display: flex; }\n".to_string()));
-        map.insert("grid", Arc::new(".grid { display: grid; }\n".to_string()));
-        map.insert("block", Arc::new(".block { display: block; }\n".to_string()));
-        map.insert("hidden", Arc::new(".hidden { display: none; }\n".to_string()));
-        RwLock::new(map)
-    });
 
 // Memory-mapped file cache to avoid disk I/O (platform independent version)
 thread_local! {
@@ -79,16 +65,6 @@ thread_local! {
 static PREV_CLASS_IDS: Lazy<RwLock<HashSet<u32>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
 // Ultra-fast hash function specific for class detection
-#[inline]
-fn hash_class_str(s: &str) -> u64 {
-    let mut h = 0xcbf29ce484222325u64;
-    for b in s.bytes() {
-        h = h.wrapping_mul(0x100000001b3);
-        h ^= b as u64;
-    }
-    h
-}
-
 #[inline]
 fn fast_hash<T: Hash>(v: &T) -> u64 {
     let mut h = SeaHasher::new();
@@ -142,102 +118,6 @@ fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
 }
 
 // Cross-platform file content checking
-fn is_file_content_match(path: &Path, expected_hash: u64) -> bool {
-    let now = Instant::now();
-    
-    // Platform-specific implementation
-    #[cfg(windows)]
-    {
-        // Check the cache first
-        let mut cache_hit = false;
-        let result = MMAP_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            if let Some((mmap, hash, timestamp)) = cache.get(path) {
-                // Use cached value if recent (within 100ms)
-                if now.duration_since(*timestamp) < Duration::from_millis(100) {
-                    cache_hit = true;
-                    return *hash == expected_hash;
-                }
-            }
-            
-            // Read the file
-            match std::fs::File::open(path) {
-                Ok(file) => {
-                    match unsafe { MmapOptions::new().map(&file) } {
-                        Ok(mmap) => {
-                            let mut hasher = SeaHasher::new();
-                            hasher.write(&mmap);
-                            let hash = hasher.finish();
-                            
-                            // Update cache
-                            cache.insert(path.to_path_buf(), (mmap, hash, now));
-                            
-                            hash == expected_hash
-                        },
-                        Err(_) => false
-                    }
-                },
-                Err(_) => false
-            }
-        });
-        
-        if cache_hit {
-            // Update the timestamp if we had a cache hit
-            MMAP_CACHE.with(|cache| {
-                if let Some((_, _, timestamp)) = cache.borrow_mut().get_mut(path) {
-                    *timestamp = now;
-                }
-            });
-        }
-        
-        return result;
-    }
-    
-    // Non-Windows implementation
-    #[cfg(not(windows))]
-    {
-        // Check the cache first
-        let mut cache_hit = false;
-        let result = CONTENT_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            if let Some((_, hash, timestamp)) = cache.get(path) {
-                // Use cached value if recent
-                if now.duration_since(*timestamp) < Duration::from_millis(100) {
-                    cache_hit = true;
-                    return *hash == expected_hash;
-                }
-            }
-            
-            // Read the file
-            match std::fs::read(path) {
-                Ok(content) => {
-                    let mut hasher = SeaHasher::new();
-                    hasher.write(&content);
-                    let hash = hasher.finish();
-                    
-                    // Update cache
-                    cache.insert(path.to_path_buf(), (content, hash, now));
-                    
-                    hash == expected_hash
-                },
-                Err(_) => false
-            }
-        });
-        
-        if cache_hit {
-            // Update the timestamp if we had a cache hit
-            CONTENT_CACHE.with(|cache| {
-                if let Some((_, _, timestamp)) = cache.borrow_mut().get_mut(path) {
-                    *timestamp = now;
-                }
-            });
-        }
-        
-        return result;
-    }
-}
-
-// New function for ultra-fast CSS micro-patching
 fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
                  engine: &StyleEngine, interner: &ClassInterner) -> bool {
     // Skip if the file doesn't exist yet
@@ -1049,10 +929,6 @@ pub fn generate_css_ids(
     let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
     sorted.sort_unstable();
     
-    let mut sorted_hasher = SeaHasher::new();
-    std::hash::Hash::hash_slice(&sorted, &mut sorted_hasher);
-    let sorted_hash = sorted_hasher.finish();
-    
     LAST_IDS_COUNT.store(sorted.len(), Ordering::Relaxed);
     LAST_IDS_HASH.store(direct_hash, Ordering::Relaxed);
 
@@ -1119,6 +995,130 @@ pub fn generate_css_ids(
                 .map(|id| interner.get(*id).to_string())
                 .collect();
             let missing_refs: Vec<&str> = missing_class_strings.iter().map(|s| s.as_str()).collect();
+            let new_css_rules = engine.generate_css_for_classes_batch(&missing_refs);
+
+            let new_normalized: Vec<String> = new_css_rules
+                .iter()
+                .map(|r| normalize_generated_css(r))
+                .collect();
+
+            if let Ok(mut cache) = NORMALIZED_CSS_CACHE.lock() {
+                for (i_ref, css) in chunk.iter().zip(new_normalized.iter()) {
+                    if !css.trim().is_empty() {
+                        let id = sorted[**i_ref];
+                        let arc_css = Arc::new(css.clone());
+                        cache.put(id, Arc::clone(&arc_css));
+                        normalized_blocks[**i_ref] = Some(arc_css);
+                    }
+                }
+            }
+        }
+    }
+
+    // Calculate capacity and check if we actually have content
+    let mut capacity = 0;
+    let mut has_content = false;
+    for block_opt in &normalized_blocks {
+        if let Some(css_arc) = block_opt {
+            capacity += css_arc.len() + 2;
+            has_content = true;
+        }
+    }
+
+    if !has_content {
+        // Empty output - fast path
+        if let Ok(existing) = std::fs::metadata(output_path) {
+            if existing.len() > 0 {
+                // Only write if not already empty
+                crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+                
+                // Update caches
+                if let Ok(mut cache) = OUTPUT_CACHE.write() {
+                    cache.insert(direct_hash, (Vec::new(), 0));
+                }
+                if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
+                    path_cache.insert(output_path.to_path_buf(), (0, now));
+                }
+            }
+        } else {
+            // File doesn't exist, create empty file
+            crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+            
+            // Update caches
+            if let Ok(mut cache) = OUTPUT_CACHE.write() {
+                cache.insert(direct_hash, (Vec::new(), 0));
+            }
+            if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
+                path_cache.insert(output_path.to_path_buf(), (0, now));
+            }
+        }
+        
+        // Store current class IDs for future patches
+        if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
+            *prev_ids = class_ids.clone();
+        }
+        
+        // Update state before returning
+        last_state.store(direct_hash, Ordering::Relaxed);
+        LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
+        return;
+    }
+
+    // Build final output string
+    let mut aggregate = String::with_capacity(capacity);
+    let mut first = true;
+    for block_opt in normalized_blocks {
+        if let Some(css_arc) = block_opt {
+            if !first {
+                aggregate.push_str("\n\n");
+            }
+            aggregate.push_str(&css_arc);
+            first = false;
+        }
+    }
+
+    let aggregate = condense_blank_lines(&aggregate);
+    let content_hash = fast_hash(&aggregate);
+    
+    // Check if file already has this content
+    let need_write = if let Ok(path_cache) = PATH_CONTENT_CACHE.read() {
+        match path_cache.get(output_path) {
+            Some((hash, _)) => *hash != content_hash,
+            None => true
+        }
+    } else {
+        true
+    };
+    
+    if need_write {
+        if let Ok(file) = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(output_path)
+        {
+            let mut writer = BufWriter::with_capacity(aggregate.len() + 256, file);
+            if writer.write_all(aggregate.as_bytes()).is_ok() && writer.flush().is_ok() {
+                // Cache the output for future use
+                if let Ok(mut cache) = OUTPUT_CACHE.write() {
+                    cache.insert(direct_hash, (aggregate.into_bytes(), content_hash));
+                }
+                if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
+                    path_cache.insert(output_path.to_path_buf(), (content_hash, now));
+                }
+            }
+        }
+    }
+    
+    // Store current class IDs for future patches
+    if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
+        *prev_ids = class_ids.clone();
+    }
+    
+    // Update state before returning
+    last_state.store(direct_hash, Ordering::Relaxed);
+    LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
+}
             let new_css_rules = engine.generate_css_for_classes_batch(&missing_refs);
 
             let new_normalized: Vec<String> = new_css_rules

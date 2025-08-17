@@ -9,6 +9,7 @@ mod parser;
 mod utils;
 mod watcher;
 
+use std::{path::Path, sync::Mutex};
 use std::hash::Hasher;
 use seahash::SeaHasher;
 use crate::cache::ClassnameCache;
@@ -24,7 +25,7 @@ use std::{
     time::{Duration, Instant},
 };
 use std::collections::hash_map::DefaultHasher;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
@@ -42,7 +43,6 @@ fn quick_check_class_changes(path: &Path, prev_hash: u64) -> Option<(bool, u64)>
     // Extract potential class names (simple approach)
     let mut in_string = false;
     let mut string_char = ' ';
-    let mut class_positions = Vec::new();
     
     // Look for patterns like className="...", class="...", or classNames={...}
     for (i, line) in content.lines().enumerate() {
@@ -306,9 +306,6 @@ fn main() {
     
     // Add a background thread to process pending changes
     // This ensures CSS regeneration happens even if the file watcher misses changes
-    let fcids_clone = file_classnames_ids_arc.clone();
-    let ccids_clone = classname_counts_ids_arc.clone();
-    let gcids_clone = global_classnames_ids_arc.clone();
     let int_clone = interner_arc.clone();
     let se_clone = style_engine_arc.clone();
     let of_clone = output_file_arc.clone();
@@ -457,38 +454,9 @@ fn main() {
                             true
                         };
                         
-                        // Force reparse at least once every 5 checks to catch edge cases
-                        let force_reparse = path.metadata()
-                            .map(|m| m.modified().ok())
-                            .ok()
-                            .flatten()
-                            .map(|modified| {
-                                Instant::now().duration_since(
-                                    Instant::now() - Duration::from_secs(1)
-                                ).as_millis() < 100
-                            })
-                            .unwrap_or(false);
-                        
-                        // If class detection suggests no changes and we're not forcing, check content hash
-                        if !class_changed && !force_reparse && !files_needing_reparse.contains(&path) {
+                        // If class detection suggests no changes and not marked, skip
+                        if !class_changed && !files_needing_reparse.contains(&path) {
                             continue;
-                        }
-                        
-                        // Full content hash check
-                        if let Ok(content) = std::fs::read(&path) {
-                            let mut hasher = SeaHasher::new();
-                            hasher.write(&content);
-                            let content_hash = hasher.finish();
-                            
-                            if let Some(&prev_hash) = file_content_hashes.get(&path) {
-                                if prev_hash == content_hash && !files_needing_reparse.contains(&path) && !force_reparse {
-                                    // Content unchanged, skip processing
-                                    continue;
-                                }
-                            }
-                            
-                            file_content_hashes.insert(path.clone(), content_hash);
-                            files_needing_reparse.remove(&path);
                         }
                     } else {
                         // For removed files, clear the hashes
