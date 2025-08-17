@@ -23,6 +23,69 @@ use std::{
     sync::mpsc,
     time::{Duration, Instant},
 };
+use std::collections::hash_map::DefaultHasher;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread;
+
+// Function to detect class changes without full file parsing
+fn quick_check_class_changes(path: &Path, prev_hash: u64) -> Option<(bool, u64)> {
+    // Read file content
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return None,
+    };
+    
+    // Specialized hasher for class detection that ignores whitespace and comments
+    let mut hasher = DefaultHasher::new();
+    
+    // Extract potential class names (simple approach)
+    let mut in_string = false;
+    let mut string_char = ' ';
+    let mut class_positions = Vec::new();
+    
+    // Look for patterns like className="...", class="...", or classNames={...}
+    for (i, line) in content.lines().enumerate() {
+        // Skip whitespace and comment lines
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") {
+            continue;
+        }
+        
+        // Hash the line number and content - weighted by classname presence
+        hasher.write_usize(i);
+        
+        // Check for class patterns
+        if line.contains("className") || line.contains("class=") {
+            hasher.write_u8(1); // Mark this line as containing class
+            
+            // Simple tokenization to find actual classes
+            for (j, c) in line.chars().enumerate() {
+                if in_string {
+                    if c == string_char && !line[..j].ends_with('\\') {
+                        in_string = false;
+                    }
+                } else if c == '"' || c == '\'' {
+                    in_string = true;
+                    string_char = c;
+                }
+            }
+            
+            // Hash the class-containing parts more heavily
+            for word in line.split_whitespace() {
+                if word.contains("className") || word.contains("class=") {
+                    hasher.write(word.as_bytes());
+                }
+            }
+        } else {
+            // Just a regular hash for non-class lines
+            hasher.write(trimmed.as_bytes());
+        }
+    }
+    
+    let new_hash = hasher.finish();
+    Some((new_hash != prev_hash, new_hash))
+}
 
 fn main() {
     let styles_toml_path = PathBuf::from("styles.toml");
@@ -224,29 +287,62 @@ fn main() {
             .green()
     );
 
+    // State for enhanced debouncing and change detection
+    let pending_changes = Arc::new(AtomicBool::new(false));
+    let last_class_hash = Arc::new(AtomicU64::new(0));
+    let pc_clone = pending_changes.clone();
+    
+    // Add a background thread to process pending changes
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(10));
+            if pc_clone.load(Ordering::Relaxed) {
+                // Signal that we're processing changes
+                pc_clone.store(false, Ordering::Relaxed);
+                
+                // Give the file system a moment to settle
+                thread::sleep(Duration::from_millis(5));
+                
+                // Regenerate CSS with force option to ensure update
+                generator::generate_css_ids(
+                    &global_classnames_ids,
+                    &output_file,
+                    &style_engine,
+                    &interner,
+                    true,
+                );
+            }
+        }
+    });
+
+    // File watcher setup
     let (tx, rx) = mpsc::channel();
     let mut watcher =
-        new_debouncer(Duration::from_millis(50), None, tx).expect("Failed to create watcher");
+        new_debouncer(Duration::from_millis(20), None, tx).expect("Failed to create watcher");
     watcher
         .watch(&dir_canonical, RecursiveMode::Recursive)
         .expect("Failed to start watcher");
 
     // Keep track of last processed file content hash to skip identical edits
     let mut file_content_hashes: HashMap<PathBuf, u64> = HashMap::new();
+    // Class-specific hashes for better change detection
+    let mut file_class_hashes: HashMap<PathBuf, u64> = HashMap::new();
     // Last processed time to debounce rapid edits
     let mut last_processed_time: HashMap<PathBuf, Instant> = HashMap::new();
+    // Track files that need complete reparsing vs quick checking
+    let mut files_needing_reparse: HashSet<PathBuf> = HashSet::new();
 
     for res in rx {
         match res {
             Ok(events) => {
                 // Group events by path to avoid processing the same file multiple times
                 let mut path_events: HashMap<PathBuf, notify::event::EventKind> = HashMap::new();
-
+                
                 for event in events {
                     if matches!(event.kind, notify::event::EventKind::Access(_)) {
                         continue;
                     }
-
+                    
                     for raw_path in &event.paths {
                         let path = raw_path.canonicalize().unwrap_or_else(|_| raw_path.clone());
                         if utils::is_code_file(&path) && path != output_file {
@@ -256,9 +352,8 @@ fn main() {
                                     // Remove is already the most significant
                                     continue;
                                 }
-                                if matches!(existing_kind, notify::event::EventKind::Modify(_))
-                                    && !matches!(event.kind, notify::event::EventKind::Remove(_))
-                                {
+                                if matches!(existing_kind, notify::event::EventKind::Modify(_)) 
+                                   && !matches!(event.kind, notify::event::EventKind::Remove(_)) {
                                     // Keep Modify over anything but Remove
                                     continue;
                                 }
@@ -267,44 +362,76 @@ fn main() {
                         }
                     }
                 }
-
+                
+                // Track if any changes were detected
+                let mut any_changes = false;
+                
                 // Process events by path
                 for (path, kind) in path_events {
-                    // Debounce rapid changes to the same file
+                    // Debounce rapid changes to the same file - lower threshold
                     let now = Instant::now();
                     let should_process = match last_processed_time.get(&path) {
-                        Some(last_time) => now.duration_since(*last_time) > Duration::from_millis(5),
+                        Some(last_time) => now.duration_since(*last_time) > Duration::from_millis(1),
                         None => true,
                     };
-
+                    
                     if !should_process {
                         continue;
                     }
-
+                    
                     // Skip processing if file content hasn't changed
                     if !matches!(kind, notify::event::EventKind::Remove(_)) {
+                        // First check if the class content might have changed
+                        let class_changed = if let Some(prev_hash) = file_class_hashes.get(&path) {
+                            if let Some((changed, new_hash)) = quick_check_class_changes(&path, *prev_hash) {
+                                if changed {
+                                    file_class_hashes.insert(path.clone(), new_hash);
+                                    // Mark for full reparse
+                                    files_needing_reparse.insert(path.clone());
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                // Couldn't do quick check, fallback to full hash
+                                true
+                            }
+                        } else {
+                            // No previous hash, need to check
+                            true
+                        };
+                        
+                        // If class detection suggests no changes, skip full content check
+                        if !class_changed {
+                            continue;
+                        }
+                        
+                        // Full content hash check
                         if let Ok(content) = std::fs::read(&path) {
                             let mut hasher = SeaHasher::new();
                             hasher.write(&content);
                             let content_hash = hasher.finish();
-
+                            
                             if let Some(&prev_hash) = file_content_hashes.get(&path) {
-                                if prev_hash == content_hash {
+                                if prev_hash == content_hash && !files_needing_reparse.contains(&path) {
                                     // Content unchanged, skip processing
                                     continue;
                                 }
                             }
-
+                            
                             file_content_hashes.insert(path.clone(), content_hash);
+                            files_needing_reparse.remove(&path);
                         }
                     } else {
-                        // For removed files, clear the hash
+                        // For removed files, clear the hashes
                         file_content_hashes.remove(&path);
+                        file_class_hashes.remove(&path);
+                        files_needing_reparse.remove(&path);
                     }
-
+                    
                     // Update last processed time
                     last_processed_time.insert(path.clone(), now);
-
+                    
                     // Process the event
                     if matches!(kind, notify::event::EventKind::Remove(_)) {
                         watcher::process_file_remove(
@@ -329,6 +456,20 @@ fn main() {
                             &style_engine,
                         );
                     }
+                    
+                    // Save the new class hash
+                    if !matches!(kind, notify::event::EventKind::Remove(_)) {
+                        if let Some((_, new_hash)) = quick_check_class_changes(&path, 0) {
+                            file_class_hashes.insert(path.clone(), new_hash);
+                        }
+                    }
+                    
+                    any_changes = true;
+                }
+                
+                // If any changes were processed, signal the background thread
+                if any_changes {
+                    pending_changes.store(true, Ordering::Relaxed);
                 }
             }
             Err(e) => println!("Watch error: {:?}", e),
