@@ -1,0 +1,7 @@
+{
+    "git.ignoreLimitWarning": true,
+    "terminal.integrated.scrollback": 1e+72,
+    // "files.exclude": {
+    //     "**/.dx": true
+    // }
+}

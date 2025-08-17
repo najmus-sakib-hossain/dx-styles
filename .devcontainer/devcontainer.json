@@ -1,0 +1,5 @@
+{
+  "name": "dx",
+  "image": "mcr.microsoft.com/devcontainers/universal:2-linux",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y build-essential pkg-config curl git cmake flatbuffers-compiler && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+}

@@ -1,0 +1,22 @@
+# Dx Styles framework configuration
+framework = "nextjs"
+
+[frameworks.nextjs]
+root = "playgrounds/nextjs"
+output = "playgrounds/nextjs/app/globals.css"
+extensions = ["tsx", "jsx", "html"]
+
+[frameworks.react]
+root = "playgrounds/react"
+output = "playgrounds/react/src/global.css"
+extensions = ["tsx", "jsx"]
+
+[frameworks.vite]
+root = "playgrounds/vite"
+output = "playgrounds/vite/src/global.css"
+extensions = ["ts", "js", "tsx", "jsx", "html"]
+
+[frameworks.html]
+root = "playgrounds/html"
+output = "playgrounds/html/global.css"
+extensions = ["html"]

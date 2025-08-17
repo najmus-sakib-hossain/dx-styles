@@ -1,0 +1,13 @@
+namespace cache;
+
+table FileEntry {
+    path: string;
+    modified: ulong;
+    classnames: [string];
+}
+
+table Cache {
+    entries: [FileEntry];
+}
+
+root_type Cache;

@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+body {
+    background: red;
+}
+
+.w-\(100px\) {
+    width: 100px;
+}

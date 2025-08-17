@@ -1,0 +1,877 @@
+# -----------------------------------------------------------------------------
+# [screens]
+# Defines named breakpoints for creating responsive designs.
+# These are used to prefix any utility class, e.g., "md:text-lg".
+# Format: name = "min-width value"
+# -----------------------------------------------------------------------------
+[screens]
+xs = "480px"
+sm = "640px"
+md = "768px"
+lg = "1024px"
+xl = "1280px"
+"2xl" = "1536px"
+
+# -----------------------------------------------------------------------------
+# [states]
+# Defines pseudo-class variants that can be prefixed to any utility.
+# e.g., "hover:bg-blue-500", "focus:ring-2", "first-child:p-0"
+# Format: name = "pseudo-class"
+# -----------------------------------------------------------------------------
+[states]
+hover = ":hover"
+focus = ":focus"
+focus-within = ":focus-within"
+focus-visible = ":focus-visible"
+active = ":active"
+visited = ":visited"
+disabled = ":disabled"
+checked = ":checked"
+first = ":first-child"
+last = ":last-child"
+odd = ":nth-child(odd)"
+even = ":nth-child(even)"
+required = ":required"
+optional = ":optional"
+valid = ":valid"
+invalid = ":invalid"
+read-only = ":read-only"
+before = "::before"
+after = "::after"
+placeholder = "::placeholder"
+file = "::file-selector-button"
+marker = "::marker"
+selection = "::selection"
+group-hover = ".group:hover &"
+group-focus = ".group:focus &"
+group-active = ".group:active &"
+group-visited = ".group:visited &"
+peer-checked = ".peer:checked ~ &"
+peer-focus = ".peer:focus ~ &"
+peer-active = ".peer:active &"
+peer-hover = ".peer:hover &"
+empty = ":empty"
+target = ":target"
+dark = ".dark &"
+light = ".light &"
+
+# -----------------------------------------------------------------------------
+# [container_queries]
+# Defines named container query breakpoints.
+# These are prefixed with '@' to distinguish them from screen breakpoints.
+# e.g., "@md:text-lg"
+# Format: name = "min-width value"
+# -----------------------------------------------------------------------------
+[container_queries]
+"@xs" = "20rem"   # 320px
+"@sm" = "24rem"   # 384px
+"@md" = "28rem"   # 448px
+"@lg" = "32rem"   # 512px
+"@xl" = "36rem"   # 576px
+"@2xl" = "42rem"  # 672px
+"@3xl" = "48rem"  # 768px
+"@4xl" = "56rem"  # 896px
+"@5xl" = "64rem"  # 1024px
+"@6xl" = "72rem"  # 1152px
+"@7xl" = "80rem"  # 1280px
+"@8xl" = "88rem"  # 1408px
+"@9xl" = "96rem"  # 1536px
+
+# -----------------------------------------------------------------------------
+# [animation_generators]
+# Defines the grammar for sentence-style animation utilities.
+# Placeholders:
+#  {hash}  -> unique hash per animation instance
+#  {value1|1s} -> duration (default 1s)
+#  {value2|0s} -> delay (default 0s)
+#  {rules} -> expanded CSS declarations collected from from:/to:/via: segments
+#  {perc}  -> percentage used by via: entries
+# -----------------------------------------------------------------------------
+[animation_generators]
+"animate" = "animation-name: dx-animation-name-{hash}; animation-duration: {value1|1s}; animation-delay: {value2|0s};"
+"from" = "0% {{ {rules} }}"
+"to" = "100% {{ {rules} }}"
+"via" = "{perc}% {{ {rules} }}"
+
+# -----------------------------------------------------------------------------
+# [static]
+# For simple, one-off classes that have a single, unchanging CSS rule.
+# Format: class-name = "css-rule"
+# -----------------------------------------------------------------------------
+[static]
+"-m-px" = "margin: -1px;"
+"-mb-px" = "margin-bottom: -1px;"
+"-ml-px" = "margin-left: -1px;"
+"-mr-px" = "margin-right: -1px;"
+"-mt-px" = "margin-top: -1px;"
+"-mx-px" = "margin-left: -1px; margin-right: -1px;"
+"-my-px" = "margin-top: -1px; margin-bottom: -1px;"
+"-space-x-px" = "margin-left: -1px;"
+"-space-y-px" = "margin-top: -1px;"
+absolute = "position: absolute;"
+accent-transparent = "accent-color: transparent;"
+antialiased = "-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;"
+appearance-none = "appearance: none;"
+aspect-auto = "aspect-ratio: auto;"
+aspect-square = "aspect-ratio: 1 / 1;"
+aspect-video = "aspect-ratio: 16 / 9;"
+basis-auto = "flex-basis: auto;"
+basis-px = "flex-basis: 1px;"
+bg-auto = "background-size: auto;"
+bg-clip-border = "background-clip: border-box;"
+bg-clip-content = "background-clip: content-box;"
+bg-clip-padding = "background-clip: padding-box;"
+bg-clip-text = "background-clip: text;"
+bg-contain = "background-size: contain;"
+bg-cover = "background-size: cover;"
+bg-fixed = "background-attachment: fixed;"
+bg-local = "background-attachment: local;"
+bg-no-repeat = "background-repeat: no-repeat;"
+bg-none = "background-image: none;"
+bg-origin-border = "background-origin: border-box;"
+bg-origin-content = "background-origin: content-box;"
+bg-origin-padding = "background-origin: padding-box;"
+bg-repeat = "background-repeat: repeat;"
+bg-repeat-round = "background-repeat: round;"
+bg-repeat-space = "background-repeat: space;"
+bg-repeat-x = "background-repeat: repeat-x;"
+bg-repeat-y = "background-repeat: repeat-y;"
+bg-scroll = "background-attachment: scroll;"
+block = "display: block;"
+border-b-transparent = "border-bottom-color: transparent;"
+border-collapse = "border-collapse: collapse;"
+border-dashed = "border-style: dashed;"
+border-double = "border-style: double;"
+border-dotted = "border-style: dotted;"
+border-hidden = "border-style: hidden;"
+border-l-transparent = "border-left-color: transparent;"
+border-none = "border-style: none;"
+border-r-transparent = "border-right-color: transparent;"
+border-separate = "border-collapse: separate;"
+border-solid = "border-style: solid;"
+border-spacing-0 = "border-spacing: 0;"
+border-t-transparent = "border-top-color: transparent;"
+box-border = "box-sizing: border-box;"
+box-content = "box-sizing: content-box;"
+break-after-all = "break-after: all;"
+break-after-auto = "break-after: auto;"
+break-after-avoid = "break-after: avoid;"
+break-after-avoid-page = "break-after: avoid-page;"
+break-after-column = "break-after: column;"
+break-after-left = "break-after: left;"
+break-after-page = "break-after: page;"
+break-after-right = "break-after: right;"
+break-all = "word-break: break-all;"
+break-before-all = "break-before: all;"
+break-before-auto = "break-before: auto;"
+break-before-avoid = "break-before: avoid;"
+break-before-avoid-page = "break-before: avoid-page;"
+break-before-column = "break-before: column;"
+break-before-left = "break-before: left;"
+break-before-page = "break-before: page;"
+break-before-right = "break-before: right;"
+break-inside-auto = "break-inside: auto;"
+break-inside-avoid = "break-inside: avoid;"
+break-inside-avoid-page = "break-inside: avoid-page;"
+break-inside-column = "break-inside: column;"
+break-normal = "overflow-wrap: normal; word-break: normal;"
+break-words = "overflow-wrap: break-word;"
+capitalize = "text-transform: capitalize;"
+caption-bottom = "caption-side: bottom;"
+caption-top = "caption-side: top;"
+caret-transparent = "caret-color: transparent;"
+col-auto = "grid-column: auto;"
+columns-auto = "columns: auto;"
+container = "width: 100%;"
+container-type-inline-size = "container-type: inline-size;"
+container-type-normal = "container-type: normal;"
+container-type-size = "container-type: size;"
+content-none = "content: none;"
+contents = "display: contents;"
+decoration-clone = "box-decoration-break: clone;"
+decoration-slice = "box-decoration-break: slice;"
+decoration-transparent = "text-decoration-color: transparent;"
+diagonal-fractions = "font-variant-numeric: diagonal-fractions;"
+divide-dashed = "border-style: dashed;"
+divide-double = "border-style: double;"
+divide-dotted = "border-style: dotted;"
+divide-none = "border-style: none;"
+divide-solid = "border-style: solid;"
+divide-transparent = "border-color: transparent;"
+fill-transparent = "fill: transparent;"
+fixed = "position: fixed;"
+flex = "display: flex;"
+flex-1 = "flex: 1 1 0%;"
+flex-auto = "flex: 1 1 auto;"
+flex-col = "flex-direction: column;"
+flex-col-reverse = "flex-direction: column-reverse;"
+flex-initial = "flex: 0 1 auto;"
+flex-none = "flex: none;"
+flex-nowrap = "flex-wrap: nowrap;"
+flex-row = "flex-direction: row;"
+flex-row-reverse = "flex-direction: row-reverse;"
+flex-wrap = "flex-wrap: wrap;"
+flex-wrap-reverse = "flex-wrap: wrap-reverse;"
+flow-root = "display: flow-root;"
+from-transparent = "--tw-gradient-from: transparent;"
+grid = "display: grid;"
+grow = "flex-grow: 1;"
+grow-0 = "flex-grow: 0;"
+hidden = "display: none;"
+hyphens-auto = "hyphens: auto;"
+hyphens-manual = "hyphens: manual;"
+hyphens-none = "hyphens: none;"
+inline = "display: inline;"
+inline-block = "display: inline-block;"
+inline-flex = "display: inline-flex;"
+inline-grid = "display: inline-grid;"
+inline-table = "display: inline-table;"
+invisible = "visibility: hidden;"
+isolate = "isolation: isolate;"
+isolate-auto = "isolation: auto;"
+italic = "font-style: italic;"
+line-through = "text-decoration: line-through;"
+lining-nums = "font-variant-numeric: lining-nums;"
+list-decimal = "list-style-type: decimal;"
+list-disc = "list-style-type: disc;"
+list-image-none = "list-style-image: none;"
+list-inside = "list-style-position: inside;"
+list-item = "display: list-item;"
+list-none = "list-style-type: none;"
+list-outside = "list-style-position: outside;"
+lowercase = "text-transform: lowercase;"
+m-px = "margin: 1px;"
+mb-px = "margin-bottom: 1px;"
+mix-blend-color = "mix-blend-mode: color;"
+mix-blend-color-burn = "mix-blend-mode: color-burn;"
+mix-blend-color-dodge = "mix-blend-mode: color-dodge;"
+mix-blend-darken = "mix-blend-mode: darken;"
+mix-blend-difference = "mix-blend-mode: difference;"
+mix-blend-exclusion = "mix-blend-mode: exclusion;"
+mix-blend-hard-light = "mix-blend-mode: hard-light;"
+mix-blend-hue = "mix-blend-mode: hue;"
+mix-blend-lighten = "mix-blend-mode: lighten;"
+mix-blend-luminosity = "mix-blend-mode: luminosity;"
+mix-blend-multiply = "mix-blend-mode: multiply;"
+mix-blend-normal = "mix-blend-mode: normal;"
+mix-blend-overlay = "mix-blend-mode: overlay;"
+mix-blend-saturation = "mix-blend-mode: saturation;"
+mix-blend-screen = "mix-blend-mode: screen;"
+mix-blend-soft-light = "mix-blend-mode: soft-light;"
+ml-px = "margin-left: 1px;"
+mr-px = "margin-right: 1px;"
+mt-px = "margin-top: 1px;"
+mx-px = "margin-left: 1px; margin-right: 1px;"
+my-px = "margin-top: 1px; margin-bottom: 1px;"
+no-underline = "text-decoration: none;"
+normal-case = "text-transform: none;"
+normal-nums = "font-variant-numeric: normal;"
+not-italic = "font-style: normal;"
+not-sr-only = "position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal;"
+oldstyle-nums = "font-variant-numeric: oldstyle-nums;"
+opacity-0 = "opacity: 0;"
+opacity-10 = "opacity: 0.1;"
+opacity-100 = "opacity: 1;"
+opacity-20 = "opacity: 0.2;"
+opacity-25 = "opacity: 0.25;"
+opacity-30 = "opacity: 0.3;"
+opacity-40 = "opacity: 0.4;"
+opacity-5 = "opacity: 0.05;"
+opacity-50 = "opacity: 0.5;"
+opacity-60 = "opacity: 0.6;"
+opacity-70 = "opacity: 0.7;"
+opacity-75 = "opacity: 0.75;"
+opacity-80 = "opacity: 0.8;"
+opacity-90 = "opacity: 0.9;"
+opacity-95 = "opacity: 0.95;"
+ordinal = "font-variant-numeric: ordinal;"
+outline = "outline-style: solid;"
+outline-dashed = "outline-style: dashed;"
+outline-double = "outline-style: double;"
+outline-dotted = "outline-style: dotted;"
+outline-none = "outline: 2px solid transparent; outline-offset: 2px;"
+overline = "text-decoration: overline;"
+overscroll-auto = "overscroll-behavior: auto;"
+overscroll-contain = "overscroll-behavior: contain;"
+overscroll-none = "overscroll-behavior: none;"
+overscroll-x-auto = "overscroll-behavior-x: auto;"
+overscroll-x-contain = "overscroll-behavior-x: contain;"
+overscroll-x-none = "overscroll-behavior-x: none;"
+overscroll-y-auto = "overscroll-behavior-y: auto;"
+overscroll-y-contain = "overscroll-behavior-y: contain;"
+overscroll-y-none = "overscroll-behavior-y: none;"
+p-px = "padding: 1px;"
+pb-px = "padding-bottom: 1px;"
+pl-px = "padding-left: 1px;"
+placeholder-transparent = "color: transparent;"
+pointer-events-auto = "pointer-events: auto;"
+pointer-events-none = "pointer-events: none;"
+pr-px = "padding-right: 1px;"
+proportional-nums = "font-variant-numeric: proportional-nums;"
+pt-px = "padding-top: 1px;"
+px-px = "padding-left: 1px; padding-right: 1px;"
+py-px = "padding-top: 1px; padding-bottom: 1px;"
+relative = "position: relative;"
+resize = "resize: both;"
+resize-none = "resize: none;"
+resize-x = "resize: horizontal;"
+resize-y = "resize: vertical;"
+ring-inset = "--tw-ring-inset: inset;"
+ring-offset-transparent = "--tw-ring-offset-color: transparent;"
+ring-transparent = "box-shadow: 0 0 0 2px transparent;"
+rounded = "border-radius: 0.25rem;"
+rounded-2xl = "border-radius: 1rem;"
+rounded-3xl = "border-radius: 1.5rem;"
+rounded-full = "border-radius: 9999px;"
+rounded-lg = "border-radius: 0.5rem;"
+rounded-md = "border-radius: 0.375rem;"
+rounded-none = "border-radius: 0px;"
+rounded-sm = "border-radius: 0.125rem;"
+rounded-xl = "border-radius: 0.75rem;"
+row-auto = "grid-row: auto;"
+scroll-auto = "scroll-behavior: auto;"
+scroll-smooth = "scroll-behavior: smooth;"
+scrollbar-none = "::-webkit-scrollbar { display: none; } -ms-overflow-style: none; scrollbar-width: none;"
+scrollbar-thin = "::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 4px; }"
+select-all = "user-select: all;"
+select-auto = "user-select: auto;"
+select-none = "user-select: none;"
+select-text = "user-select: text;"
+shadow = "box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);"
+shadow-2xl = "box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);"
+shadow-inner = "box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);"
+shadow-lg = "box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);"
+shadow-md = "box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);"
+shadow-none = "box-shadow: 0 0 #0000;"
+shadow-sm = "box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);"
+shadow-transparent = "--tw-shadow-color: transparent;"
+shadow-xl = "box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);"
+shrink = "flex-shrink: 1;"
+shrink-0 = "flex-shrink: 0;"
+slashed-zero = "font-variant-numeric: slashed-zero;"
+space-x-px = "margin-left: 1px;"
+space-x-reverse = "--space-x-reverse: 1;"
+space-y-px = "margin-top: 1px;"
+space-y-reverse = "--space-y-reverse: 1;"
+sr-only = "position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;"
+sr-only-focusable = "position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; clip-path: inset(50%);"
+stacked-fractions = "font-variant-numeric: stacked-fractions;"
+static = "position: static;"
+sticky = "position: sticky;"
+stroke-transparent = "stroke: transparent;"
+subpixel-antialiased = "-webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto;"
+table = "display: table;"
+table-auto = "table-layout: auto;"
+table-caption = "display: table-caption;"
+table-cell = "display: table-cell;"
+table-column = "display: table-column;"
+table-column-group = "display: table-column-group;"
+table-fixed = "table-layout: fixed;"
+table-footer-group = "display: table-footer-group;"
+table-header-group = "display: table-header-group;"
+table-row = "display: table-row;"
+table-row-group = "display: table-row-group;"
+tabular-nums = "font-variant-numeric: tabular-nums;"
+text-balance = "text-wrap: balance;"
+text-clip = "text-overflow: clip;"
+text-ellipsis = "text-overflow: ellipsis;"
+text-gradient = "background-clip: text; -webkit-background-clip: text; color: transparent;"
+text-pretty = "text-wrap: pretty;"
+text-rendering-geometric-precision = "text-rendering: geometricPrecision;"
+text-rendering-optimize-legibility = "text-rendering: optimizeLegibility;"
+text-rendering-optimize-speed = "text-rendering: optimizeSpeed;"
+to-transparent = "--tw-gradient-to: transparent;"
+truncate = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+underline = "text-decoration: underline;"
+uppercase = "text-transform: uppercase;"
+via-transparent = "--tw-gradient-stops: var(--tw-gradient-from), transparent, var(--tw-gradient-to);"
+view-transition-none = "view-transition-name: none;"
+visible = "visibility: visible;"
+whitespace-normal = "white-space: normal;"
+whitespace-nowrap = "white-space: nowrap;"
+whitespace-pre = "white-space: pre;"
+whitespace-pre-line = "white-space: pre-line;"
+whitespace-pre-wrap = "white-space: pre-wrap;"
+writing-mode-horizontal-tb = "writing-mode: horizontal-tb;"
+writing-mode-vertical-lr = "writing-mode: vertical-lr;"
+writing-mode-vertical-rl = "writing-mode: vertical-rl;"
+
+# -----------------------------------------------------------------------------
+# [dynamic]
+# For classes that have a non-numeric or irregular scale.
+# Format: "prefix|css-property" = { suffix = "css-value", ... }
+# -----------------------------------------------------------------------------
+[dynamic]
+"accent|accent-color" = { "current" = "currentColor", black = "#000", white = "#fff", "gray-500" = "#6b7280", "red-500" = "#ef4444", "yellow-500" = "#f59e0b", "green-500" = "#22c55e", "blue-500" = "#3b82f6", "indigo-500" = "#6366f1", "purple-500" = "#8b5cf6", "pink-500" = "#ec4899" }
+"align|vertical-align" = { baseline = "baseline;", top = "top;", middle = "middle;", bottom = "bottom;", "text-top" = "text-top;", "text-bottom" = "text-bottom;", sub = "sub;", super = "super;" }
+"animate|animation" = { none = "none;", spin = "spin 1s linear infinite;", ping = "ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;", pulse = "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;", bounce = "bounce 1s infinite;" }
+"auto-cols|grid-auto-columns" = { auto = "auto;", min = "min-content;", max = "max-content;", fr = "minmax(0, 1fr);" }
+"auto-rows|grid-auto-rows" = { auto = "auto;", min = "min-content;", max = "max-content;", fr = "minmax(0, 1fr);" }
+"backdrop-blur|backdrop-filter" = { none = "blur(0);", sm = "blur(4px);", "" = "blur(8px);", md = "blur(12px);", lg = "blur(16px);", xl = "blur(24px);", "2xl" = "blur(40px);", "3xl" = "blur(64px);" }
+"backdrop-grayscale|backdrop-filter" = { "0" = "grayscale(0);", "" = "grayscale(100%);" }
+"backdrop-invert|backdrop-filter" = { "0" = "invert(0);", "" = "invert(100%);" }
+"backdrop-sepia|backdrop-filter" = { "0" = "sepia(0);", "" = "sepia(100%);" }
+"basis|flex-basis" = { "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", "1/5" = "20%;", "2/5" = "40%;", "3/5" = "60%;", "4/5" = "80%;", "1/6" = "16.666667%;", "2/6" = "33.333333%;", "3/6" = "50%;", "4/6" = "66.666667%;", "5/6" = "83.333333%;", "1/12" = "8.333333%;", "2/12" = "16.666667%;", "3/12" = "25%;", "4/12" = "33.333333%;", "5/12" = "41.666667%;", "6/12" = "50%;", "7/12" = "58.333333%;", "8/12" = "66.666667%;", "9/12" = "75%;", "10/12" = "83.333333%;", "11/12" = "91.666667%;", full = "100%;" }
+"bg-blend|background-blend-mode" = { normal = "normal;", multiply = "multiply;", screen = "screen;", overlay = "overlay;", darken = "darken;", lighten = "lighten;", "color-dodge" = "color-dodge;", "color-burn" = "color-burn;", "hard-light" = "hard-light;", "soft-light" = "soft-light;", difference = "difference;", exclusion = "exclusion;", hue = "hue;", saturation = "saturation;", color = "color;", luminosity = "luminosity;" }
+"bg-color|background-color" = { transparent = "transparent", current = "currentColor", black = "#000", white = "#fff", "gray-50" = "#f9fafb", "gray-100" = "#f3f4f6", "gray-200" = "#e5e7eb", "gray-300" = "#d1d5db", "gray-400" = "#9ca3af", "gray-500" = "#6b7280", "gray-600" = "#4b5563", "gray-700" = "#374151", "gray-800" = "#1f2937", "gray-900" = "#111827", "red-50" = "#fef2f2", "red-100" = "#fee2e2", "red-200" = "#fecaca", "red-300" = "#fca5a5", "red-400" = "#f87171", "red-500" = "#ef4444", "red-600" = "#dc2626", "red-700" = "#b91c1c", "red-800" = "#991b1b", "red-900" = "#7f1d1d", "yellow-50" = "#fffbeb", "yellow-100" = "#fef3c7", "yellow-200" = "#fde68a", "yellow-300" = "#fcd34d", "yellow-400" = "#fbbf24", "yellow-500" = "#f59e0b", "yellow-600" = "#d97706", "yellow-700" = "#b45309", "yellow-800" = "#92400e", "yellow-900" = "#78350f", "green-50" = "#f0fdf4", "green-100" = "#dcfce7", "green-200" = "#bbf7d0", "green-300" = "#86efac", "green-400" = "#4ade80", "green-500" = "#22c55e", "green-600" = "#16a34a", "green-700" = "#15803d", "green-800" = "#166534", "green-900" = "#14532d", "blue-50" = "#eff6ff", "blue-100" = "#dbeafe", "blue-200" = "#bfdbfe", "blue-300" = "#93c5fd", "blue-400" = "#60a5fa", "blue-500" = "#3b82f6", "blue-600" = "#2563eb", "blue-700" = "#1d4ed8", "blue-800" = "#1e40af", "blue-900" = "#1e3a8a", "indigo-50" = "#eef2ff", "indigo-100" = "#e0e7ff", "indigo-200" = "#c7d2fe", "indigo-300" = "#a5b4fc", "indigo-400" = "#818cf8", "indigo-500" = "#6366f1", "indigo-600" = "#4f46e5", "indigo-700" = "#4338ca", "indigo-800" = "#3730a3", "indigo-900" = "#312e81", "purple-50" = "#f5f3ff", "purple-100" = "#ede9fe", "purple-200" = "#ddd6fe", "purple-300" = "#c4b5fd", "purple-400" = "#a78bfa", "purple-500" = "#8b5cf6", "purple-600" = "#7c3aed", "purple-700" = "#6d28d9", "purple-800" = "#5b21b6", "purple-900" = "#4c1d95", "pink-50" = "#fdf2f8", "pink-100" = "#fce7f3", "pink-200" = "#fbcfe8", "pink-300" = "#f9a8d4", "pink-400" = "#f472b6", "pink-500" = "#ec4899", "pink-600" = "#db2777", "pink-700" = "#be185d", "pink-800" = "#9d174d", "pink-900" = "#831843" }
+"bg-gradient-to|background-image" = { t = "linear-gradient(to top, var(--tw-gradient-stops));", tr = "linear-gradient(to top right, var(--tw-gradient-stops));", r = "linear-gradient(to right, var(--tw-gradient-stops));", br = "linear-gradient(to bottom right, var(--tw-gradient-stops));", b = "linear-gradient(to bottom, var(--tw-gradient-stops));", bl = "linear-gradient(to bottom left, var(--tw-gradient-stops));", l = "linear-gradient(to left, var(--tw-gradient-stops));", tl = "linear-gradient(to top left, var(--tw-gradient-stops));" }
+"blur|filter" = { none = "blur(0);", sm = "blur(4px);", "" = "blur(8px);", md = "blur(12px);", lg = "blur(16px);", xl = "blur(24px);", "2xl" = "blur(40px);", "3xl" = "blur(64px);" }
+"border-color|border-color" = { transparent = "transparent", current = "currentColor", black = "#000", white = "#fff", "gray-50" = "#f9fafb", "gray-100" = "#f3f4f6", "gray-200" = "#e5e7eb", "gray-300" = "#d1d5db", "gray-400" = "#9ca3af", "gray-500" = "#6b7280", "gray-600" = "#4b5563", "gray-700" = "#374151", "gray-800" = "#1f2937", "gray-900" = "#111827", "red-50" = "#fef2f2", "red-100" = "#fee2e2", "red-200" = "#fecaca", "red-300" = "#fca5a5", "red-400" = "#f87171", "red-500" = "#ef4444", "red-600" = "#dc2626", "red-700" = "#b91c1c", "red-800" = "#991b1b", "red-900" = "#7f1d1d", "yellow-50" = "#fffbeb", "yellow-100" = "#fef3c7", "yellow-200" = "#fde68a", "yellow-300" = "#fcd34d", "yellow-400" = "#fbbf24", "yellow-500" = "#f59e0b", "yellow-600" = "#d97706", "yellow-700" = "#b45309", "yellow-800" = "#92400e", "yellow-900" = "#78350f", "green-50" = "#f0fdf4", "green-100" = "#dcfce7", "green-200" = "#bbf7d0", "green-300" = "#86efac", "green-400" = "#4ade80", "green-500" = "#22c55e", "green-600" = "#16a34a", "green-700" = "#15803d", "green-800" = "#166534", "green-900" = "#14532d", "blue-50" = "#eff6ff", "blue-100" = "#dbeafe", "blue-200" = "#bfdbfe", "blue-300" = "#93c5fd", "blue-400" = "#60a5fa", "blue-500" = "#3b82f6", "blue-600" = "#2563eb", "blue-700" = "#1d4ed8", "blue-800" = "#1e40af", "blue-900" = "#1e3a8a", "indigo-50" = "#eef2ff", "indigo-100" = "#e0e7ff", "indigo-200" = "#c7d2fe", "indigo-300" = "#a5b4fc", "indigo-400" = "#818cf8", "indigo-500" = "#6366f1", "indigo-600" = "#4f46e5", "indigo-700" = "#4338ca", "indigo-800" = "#3730a3", "indigo-900" = "#312e81", "purple-50" = "#f5f3ff", "purple-100" = "#ede9fe", "purple-200" = "#ddd6fe", "purple-300" = "#c4b5fd", "purple-400" = "#a78bfa", "purple-500" = "#8b5cf6", "purple-600" = "#7c3aed", "purple-700" = "#6d28d9", "purple-800" = "#5b21b6", "purple-900" = "#4c1d95", "pink-50" = "#fdf2f8", "pink-100" = "#fce7f3", "pink-200" = "#fbcfe8", "pink-300" = "#f9a8d4", "pink-400" = "#f472b6", "pink-500" = "#ec4899", "pink-600" = "#db2777", "pink-700" = "#be185d", "pink-800" = "#9d174d", "pink-900" = "#831843" }
+"border-style|border-style" = { solid = "solid;", dashed = "dashed;", dotted = "dotted;", double = "double;", hidden = "hidden;", none = "none;" }
+"bottom|bottom" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", full = "100%;" }
+"caret-color|caret-color" = { "current" = "currentColor", black = "#000", white = "#fff", "gray-500" = "#6b7280", "red-500" = "#ef4444", "yellow-500" = "#f59e0b", "green-500" = "#22c55e", "blue-500" = "#3b82f6", "indigo-500" = "#6366f1", "purple-500" = "#8b5cf6", "pink-500" = "#ec4899" }
+"clear|clear" = { left = "left;", right = "right;", both = "both;", none = "none;" }
+"container-name|container-name" = { "none" = "none", "xs" = "xs", "sm" = "sm", "md" = "md", "lg" = "lg", "xl" = "xl", "2xl" = "2xl" }
+"content-align|align-content" = { start = "flex-start;", center = "center;", end = "flex-end;", between = "space-between;", around = "space-around;", evenly = "space-evenly;" }
+"cursor|cursor" = { auto = "auto;", default = "default;", pointer = "pointer;", wait = "wait;", text = "text;", move = "move;", help = "help;", "not-allowed" = "not-allowed;", none = "none;", "context-menu" = "context-menu;", progress = "progress;", cell = "cell;", crosshair = "crosshair;", "vertical-text" = "vertical-text;", alias = "alias;", copy = "copy;", "no-drop" = "no-drop;", grab = "grab;", grabbing = "grabbing;", "all-scroll" = "all-scroll;", "col-resize" = "col-resize;", "row-resize" = "row-resize;", "n-resize" = "n-resize;", "e-resize" = "e-resize;", "s-resize" = "s-resize;", "w-resize" = "w-resize;", "ne-resize" = "ne-resize;", "nw-resize" = "nw-resize;", "se-resize" = "se-resize;", "sw-resize" = "sw-resize;", "ew-resize" = "ew-resize;", "ns-resize" = "ns-resize;", "nesw-resize" = "nesw-resize;", "nwse-resize" = "nwse-resize;", "zoom-in" = "zoom-in;", "zoom-out" = "zoom-out;" }
+"decoration-color|text-decoration-color" = { "current" = "currentColor", black = "#000", white = "#fff", "gray-500" = "#6b7280", "red-500" = "#ef4444", "yellow-500" = "#f59e0b", "green-500" = "#22c55e", "blue-500" = "#3b82f6", "indigo-500" = "#6366f1", "purple-500" = "#8b5cf6", "pink-500" = "#ec4899" }
+"decoration-style|text-decoration-style" = { solid = "solid;", double = "double;", dotted = "dotted;", dashed = "dashed;", wavy = "wavy;" }
+"divide-style|border-style" = { solid = "solid;", dashed = "dashed;", dotted = "dotted;", double = "double;", none = "none;" }
+"ease|transition-timing-function" = { linear = "linear;", in = "cubic-bezier(0.4, 0, 1, 1);", out = "cubic-bezier(0, 0, 0.2, 1);", "in-out" = "cubic-bezier(0.4, 0, 0.2, 1);" }
+"fill|fill" = { current = "currentColor;" }
+"float|float" = { right = "right;", left = "left;", none = "none;" }
+"font-family|font-family" = { sans = "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, \"Noto Sans\", sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\";", serif = "Georgia, Cambria, \"Times New Roman\", Times, serif;", mono = "Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace;" }
+"font|font-weight" = { thin = "100;", extralight = "200;", light = "300;", normal = "400;", medium = "500;", semibold = "600;", bold = "700;", extrabold = "800;", black = "900;" }
+"from|--tw-gradient-from" = { "current" = "currentColor", black = "#000", white = "#fff", "gray-500" = "#6b7280", "red-500" = "#ef4444", "yellow-500" = "#f59e0b", "green-500" = "#22c55e", "blue-500" = "#3b82f6", "indigo-500" = "#6366f1", "purple-500" = "#8b5cf6", "pink-500" = "#ec4899" }
+"gap-x|column-gap" = { "0" = "0px", "px" = "1px", "0.5" = "0.125rem", "1" = "0.25rem", "1.5" = "0.375rem", "2" = "0.5rem", "2.5" = "0.625rem", "3" = "0.75rem", "3.5" = "0.875rem", "4" = "1rem" }
+"gap-y|row-gap" = { "0" = "0px", "px" = "1px", "0.5" = "0.125rem", "1" = "0.25rem", "1.5" = "0.375rem", "2" = "0.5rem", "2.5" = "0.625rem", "3" = "0.75rem", "3.5" = "0.875rem", "4" = "1rem" }
+"gap|gap" = { "0" = "0px", "px" = "1px", "0.5" = "0.125rem", "1" = "0.25rem", "1.5" = "0.375rem", "2" = "0.5rem", "2.5" = "0.625rem", "3" = "0.75rem", "3.5" = "0.875rem", "4" = "1rem" }
+"grayscale|filter" = { "0" = "grayscale(0);", "" = "grayscale(100%);" }
+"grid-cols|grid-template-columns" = { "1" = "repeat(1, minmax(0, 1fr))", "2" = "repeat(2, minmax(0, 1fr))", "3" = "repeat(3, minmax(0, 1fr))", "4" = "repeat(4, minmax(0, 1fr))", "5" = "repeat(5, minmax(0, 1fr))", "6" = "repeat(6, minmax(0, 1fr))", "7" = "repeat(7, minmax(0, 1fr))", "8" = "repeat(8, minmax(0, 1fr))", "9" = "repeat(9, minmax(0, 1fr))", "10" = "repeat(10, minmax(0, 1fr))", "11" = "repeat(11, minmax(0, 1fr))", "12" = "repeat(12, minmax(0, 1fr))", "none" = "none" }
+"grid-flow|grid-auto-flow" = { row = "row;", col = "column;", "row-dense" = "row dense;", "col-dense" = "column dense;" }
+"grid-rows|grid-template-rows" = { "1" = "repeat(1, minmax(0, 1fr))", "2" = "repeat(2, minmax(0, 1fr))", "3" = "repeat(3, minmax(0, 1fr))", "4" = "repeat(4, minmax(0, 1fr))", "5" = "repeat(5, minmax(0, 1fr))", "6" = "repeat(6, minmax(0, 1fr))", "none" = "none" }
+"h|height" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", "1/5" = "20%;", "2/5" = "40%;", "3/5" = "60%;", "4/5" = "80%;", "1/6" = "16.666667%;", "2/6" = "33.333333%;", "3/6" = "50%;", "4/6" = "66.666667%;", "5/6" = "83.333333%;", full = "100%;", screen = "100vh;", min = "min-content;", max = "max-content;", fit = "fit-content;" }
+"inset-x|right,left" = { auto = "auto; auto;", "1/2" = "50%; 50%;", "1/3" = "33.333333%; 33.333333%;", "2/3" = "66.666667%; 66.666667%;", "1/4" = "25%; 25%;", "2/4" = "50%; 50%;", "3/4" = "75%; 75%;", full = "100%; 100%;" }
+"inset-y|top,bottom" = { auto = "auto; auto;", "1/2" = "50%; 50%;", "1/3" = "33.333333%; 33.333333%;", "2/3" = "66.666667%; 66.666667%;", "1/4" = "25%; 25%;", "2/4" = "50%; 50%;", "3/4" = "75%; 75%;", full = "100%; 100%;" }
+"inset|top,right,bottom,left" = { auto = "auto; auto; auto; auto;", "1/2" = "50%; 50%; 50%; 50%;", "1/3" = "33.333333%; 33.333333%; 33.333333%; 33.333333%;", "2/3" = "66.666667%; 66.666667%; 66.666667%; 66.666667%;", "1/4" = "25%; 25%; 25%; 25%;", "2/4" = "50%; 50%; 50%; 50%;", "3/4" = "75%; 75%; 75%; 75%;", full = "100%; 100%; 100%; 100%;" }
+"invert|filter" = { "0" = "invert(0);", "" = "invert(100%);" }
+"items-align|align-items" = { stretch = "stretch;", start = "flex-start;", center = "center;", end = "flex-end;", baseline = "baseline;" }
+"justify-content|justify-content" = { start = "flex-start;", center = "center;", end = "flex-end;", between = "space-between;", around = "space-around;", evenly = "space-evenly;" }
+"justify-items|justify-items" = { stretch = "stretch;", start = "start;", center = "center;", end = "end;" }
+"justify-self|justify-self" = { stretch = "stretch;", start = "start;", center = "center;", end = "end;", auto = "auto;" }
+"leading|line-height" = { none = "1;", tight = "1.25;", snug = "1.375;", normal = "1.5;", relaxed = "1.625;", loose = "2;" }
+"left|left" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", full = "100%;" }
+"max-h|max-height" = { full = "100%;", screen = "100vh;", min = "min-content;", max = "max-content;", fit = "fit-content;" }
+"max-w|max-width" = { "0" = "0rem;", none = "none;", xs = "20rem;", sm = "24rem;", md = "28rem;", lg = "32rem;", xl = "36rem;", "2xl" = "42rem;", "3xl" = "48rem;", "4xl" = "56rem;", "5xl" = "64rem;", "6xl" = "72rem;", "7xl" = "80rem;", full = "100%;", min = "min-content;", max = "max-content;", fit = "fit-content;", prose = "65ch;", "screen-sm" = "640px;", "screen-md" = "768px;", "screen-lg" = "1024px;", "screen-xl" = "1280px;", "screen-2xl" = "1536px;" }
+"min-h|min-height" = { "0" = "0px;", full = "100%;", screen = "100vh;", min = "min-content;", max = "max-content;", fit = "fit-content;" }
+"min-w|min-width" = { "0" = "0px;", full = "100%;", min = "min-content;", max = "max-content;", fit = "fit-content;" }
+"mix-blend|mix-blend-mode" = { normal = "normal;", multiply = "multiply;", screen = "screen;", overlay = "overlay;", darken = "darken;", lighten = "lighten;", "color-dodge" = "color-dodge;", "color-burn" = "color-burn;", "hard-light" = "hard-light;", "soft-light" = "soft-light;", difference = "difference;", exclusion = "exclusion;", hue = "hue;", saturation = "saturation;", color = "color;", luminosity = "luminosity;" }
+"object-fit|object-fit" = { contain = "contain;", cover = "cover;", fill = "fill;", none = "none;", "scale-down" = "scale-down;" }
+"object-position|object-position" = { bottom = "bottom;", center = "center;", left = "left;", "left-bottom" = "left bottom;", "left-top" = "left top;", right = "right;", "right-bottom" = "right bottom;", "right-top" = "right top;", top = "top;" }
+"origin|transform-origin" = { center = "center;", top = "top;", "top-right" = "top right;", right = "right;", "bottom-right" = "bottom right;", bottom = "bottom;", "bottom-left" = "bottom left;", left = "left;", "top-left" = "top left;" }
+"outline-style|outline-style" = { "" = "solid;", dashed = "dashed;", dotted = "dotted;", double = "double;", none = "2px solid transparent; outline-offset: 2px;" }
+"overflow-x|overflow-x" = { auto = "auto;", hidden = "hidden;", visible = "visible;", scroll = "scroll;" }
+"overflow-y|overflow-y" = { auto = "auto;", hidden = "hidden;", visible = "visible;", scroll = "scroll;" }
+"overflow|overflow" = { auto = "auto;", hidden = "hidden;", visible = "visible;", scroll = "scroll;" }
+"overscroll-behavior-x|overscroll-behavior-x" = { auto = "auto;", contain = "contain;", none = "none;" }
+"overscroll-behavior-y|overscroll-behavior-y" = { auto = "auto;", contain = "contain;", none = "none;" }
+"overscroll-behavior|overscroll-behavior" = { auto = "auto;", contain = "contain;", none = "none;" }
+"place-content|place-content" = { start = "start;", center = "center;", end = "end;", between = "space-between;", around = "space-around;", evenly = "space-evenly;", stretch = "stretch;" }
+"place-items|place-items" = { stretch = "stretch;", start = "start;", center = "center;", end = "end;" }
+"place-self|place-self" = { auto = "auto;", start = "start;", center = "center;", end = "end;", stretch = "stretch;" }
+"placeholder-color|color" = { "gray-50" = "#f9fafb", "gray-100" = "#f3f4f6", "gray-200" = "#e5e7eb", "gray-300" = "#d1d5db", "gray-400" = "#9ca3af", "gray-500" = "#6b7280", "gray-600" = "#4b5563", "gray-700" = "#374151", "gray-800" = "#1f2937", "gray-900" = "#111827", "red-50" = "#fef2f2", "red-100" = "#fee2e2", "red-200" = "#fecaca", "red-300" = "#fca5a5", "red-400" = "#f87171", "red-500" = "#ef4444", "red-600" = "#dc2626", "red-700" = "#b91c1c", "red-800" = "#991b1b", "red-900" = "#7f1d1d", "yellow-50" = "#fffbeb", "yellow-100" = "#fef3c7", "yellow-200" = "#fde68a", "yellow-300" = "#fcd34d", "yellow-400" = "#fbbf24", "yellow-500" = "#f59e0b", "yellow-600" = "#d97706", "yellow-700" = "#b45309", "yellow-800" = "#92400e", "yellow-900" = "#78350f", "green-50" = "#f0fdf4", "green-100" = "#dcfce7", "green-200" = "#bbf7d0", "green-300" = "#86efac", "green-400" = "#4ade80", "green-500" = "#22c55e", "green-600" = "#16a34a", "green-700" = "#15803d", "green-800" = "#166534", "green-900" = "#14532d", "blue-50" = "#eff6ff", "blue-100" = "#dbeafe", "blue-200" = "#bfdbfe", "blue-300" = "#93c5fd", "blue-400" = "#60a5fa", "blue-500" = "#3b82f6", "blue-600" = "#2563eb", "blue-700" = "#1d4ed8", "blue-800" = "#1e40af", "blue-900" = "#1e3a8a", "indigo-50" = "#eef2ff", "indigo-100" = "#e0e7ff", "indigo-200" = "#c7d2fe", "indigo-300" = "#a5b4fc", "indigo-400" = "#818cf8", "indigo-500" = "#6366f1", "indigo-600" = "#4f46e5", "indigo-700" = "#4338ca", "indigo-800" = "#3730a3", "indigo-900" = "#312e81", "purple-50" = "#f5f3ff", "purple-100" = "#ede9fe", "purple-200" = "#ddd6fe", "purple-300" = "#c4b5fd", "purple-400" = "#a78bfa", "purple-500" = "#8b5cf6", "purple-600" = "#7c3aed", "purple-700" = "#6d28d9", "purple-800" = "#5b21b6", "purple-900" = "#4c1d95", "pink-50" = "#fdf2f8", "pink-100" = "#fce7f3", "pink-200" = "#fbcfe8", "pink-300" = "#f9a8d4", "pink-400" = "#f472b6", "pink-500" = "#ec4899", "pink-600" = "#db2777", "pink-700" = "#be185d", "pink-800" = "#9d174d", "pink-900" = "#831843" }
+"pointer-events|pointer-events" = { none = "none;", auto = "auto;" }
+"right|right" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", full = "100%;" }
+"ring|box-shadow" = { "gray-50" = "0 0 0 2px #f9fafb", "gray-100" = "0 0 0 2px #f3f4f6", "gray-200" = "0 0 0 2px #e5e7eb", "gray-300" = "0 0 0 2px #d1d5db", "gray-400" = "0 0 0 2px #9ca3af", "gray-500" = "0 0 0 2px #6b7280", "gray-600" = "0 0 0 2px #4b5563", "gray-700" = "0 0 0 2px #374151", "gray-800" = "0 0 0 2px #1f2937", "gray-900" = "0 0 0 2px #111827", "red-50" = "0 0 0 2px #fef2f2", "red-100" = "0 0 0 2px #fee2e2", "red-200" = "0 0 0 2px #fecaca", "red-300" = "0 0 0 2px #fca5a5", "red-400" = "0 0 0 2px #f87171", "red-500" = "0 0 0 2px #ef4444", "red-600" = "0 0 0 2px #dc2626", "red-700" = "0 0 0 2px #b91c1c", "red-800" = "0 0 0 2px #991b1b", "red-900" = "0 0 0 2px #7f1d1d", "yellow-50" = "0 0 0 2px #fffbeb", "yellow-100" = "0 0 0 2px #fef3c7", "yellow-200" = "0 0 0 2px #fde68a", "yellow-300" = "0 0 0 2px #fcd34d", "yellow-400" = "0 0 0 2px #fbbf24", "yellow-500" = "0 0 0 2px #f59e0b", "yellow-600" = "0 0 0 2px #d97706", "yellow-700" = "0 0 0 2px #b45309", "yellow-800" = "0 0 0 2px #92400e", "yellow-900" = "0 0 0 2px #78350f", "green-50" = "0 0 0 2px #f0fdf4", "green-100" = "0 0 0 2px #dcfce7", "green-200" = "0 0 0 2px #bbf7d0", "green-300" = "0 0 0 2px #86efac", "green-400" = "0 0 0 2px #4ade80", "green-500" = "0 0 0 2px #22c55e", "green-600" = "0 0 0 2px #16a34a", "green-700" = "0 0 0 2px #15803d", "green-800" = "0 0 0 2px #166534", "green-900" = "0 0 0 2px #14532d", "blue-50" = "0 0 0 2px #eff6ff", "blue-100" = "0 0 0 2px #dbeafe", "blue-200" = "0 0 0 2px #bfdbfe", "blue-300" = "0 0 0 2px #93c5fd", "blue-400" = "0 0 0 2px #60a5fa", "blue-500" = "0 0 0 2px #3b82f6", "blue-600" = "0 0 0 2px #2563eb", "blue-700" = "0 0 0 2px #1d4ed8", "blue-800" = "0 0 0 2px #1e40af", "blue-900" = "0 0 0 2px #1e3a8a", "indigo-50" = "0 0 0 2px #eef2ff", "indigo-100" = "0 0 0 2px #e0e7ff", "indigo-200" = "0 0 0 2px #c7d2fe", "indigo-300" = "0 0 0 2px #a5b4fc", "indigo-400" = "0 0 0 2px #818cf8", "indigo-500" = "0 0 0 2px #6366f1", "indigo-600" = "0 0 0 2px #4f46e5", "indigo-700" = "0 0 0 2px #4338ca", "indigo-800" = "0 0 0 2px #3730a3", "indigo-900" = "0 0 0 2px #312e81", "purple-50" = "0 0 0 2px #f5f3ff", "purple-100" = "0 0 0 2px #ede9fe", "purple-200" = "0 0 0 2px #ddd6fe", "purple-300" = "0 0 0 2px #c4b5fd", "purple-400" = "0 0 0 2px #a78bfa", "purple-500" = "0 0 0 2px #8b5cf6", "purple-600" = "0 0 0 2px #7c3aed", "purple-700" = "0 0 0 2px #6d28d9", "purple-800" = "0 0 0 2px #5b21b6", "purple-900" = "0 0 0 2px #4c1d95", "pink-50" = "0 0 0 2px #fdf2f8", "pink-100" = "0 0 0 2px #fce7f3", "pink-200" = "0 0 0 2px #fbcfe8", "pink-300" = "0 0 0 2px #f9a8d4", "pink-400" = "0 0 0 2px #f472b6", "pink-500" = "0 0 0 2px #ec4899", "pink-600" = "0 0 0 2px #db2777", "pink-700" = "0 0 0 2px #be185d", "pink-800" = "0 0 0 2px #9d174d", "pink-900" = "0 0 0 2px #831843" }
+"rounded-b|border-bottom-right-radius, border-bottom-left-radius" = { none = "0px", sm = "0.125rem", "" = "0.25rem", md = "0.375rem", lg = "0.5rem", xl = "0.75rem", "2xl" = "1rem", "3xl" = "1.5rem", full = "9999px" }
+"rounded-l|border-top-left-radius, border-bottom-left-radius" = { none = "0px", sm = "0.125rem", "" = "0.25rem", md = "0.375rem", lg = "0.5rem", xl = "0.75rem", "2xl" = "1rem", "3xl" = "1.5rem", full = "9999px" }
+"rounded-r|border-top-right-radius, border-bottom-right-radius" = { none = "0px", sm = "0.125rem", "" = "0.25rem", md = "0.375rem", lg = "0.5rem", xl = "0.75rem", "2xl" = "1rem", "3xl" = "1.5rem", full = "9999px" }
+"rounded-t|border-top-left-radius, border-top-right-radius" = { none = "0px", sm = "0.125rem", "" = "0.25rem", md = "0.375rem", lg = "0.5rem", xl = "0.75rem", "2xl" = "1rem", "3xl" = "1.5rem", full = "9999px" }
+"scroll-behavior|scroll-behavior" = { auto = "auto;", smooth = "smooth;" }
+"scroll-margin|scroll-margin" = { "0" = "0px", "px" = "1px", "0.5" = "0.125rem", "1" = "0.25rem", "1.5" = "0.375rem", "2" = "0.5rem", "2.5" = "0.625rem", "3" = "0.75rem", "3.5" = "0.875rem", "4" = "1rem" }
+"scroll-padding|scroll-padding" = { "0" = "0px", "px" = "1px", "0.5" = "0.125rem", "1" = "0.25rem", "1.5" = "0.375rem", "2" = "0.5rem", "2.5" = "0.625rem", "3" = "0.75rem", "3.5" = "0.875rem", "4" = "1rem" }
+"scrolling|-webkit-overflow-scrolling" = { touch = "touch;", auto = "auto;" }
+"select|user-select" = { none = "none;", text = "text;", all = "all;", auto = "auto;" }
+"self-align|align-self" = { auto = "auto;", start = "flex-start;", center = "center;", end = "flex-end;", stretch = "stretch;", baseline = "baseline;" }
+"sepia|filter" = { "0" = "sepia(0);", "" = "sepia(100%);" }
+"shadow|box-shadow" = { sm = "0 1px 2px 0 rgba(0, 0, 0, 0.05);", "" = "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);", md = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);", lg = "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);", xl = "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);", "2xl" = "0 25px 50px -12px rgba(0, 0, 0, 0.25);", inner = "inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);", none = "none;" }
+"snap-align|scroll-snap-align" = { start = "start;", end = "end;", center = "center;", "align-none" = "none;" }
+"snap-stop|scroll-snap-stop" = { normal = "normal;", always = "always;" }
+"snap-type|scroll-snap-type" = { none = "none;", x = "x var(--tw-scroll-snap-strictness);", y = "y var(--tw-scroll-snap-strictness);", both = "both var(--tw-scroll-snap-strictness);", mandatory = "--tw-scroll-snap-strictness: mandatory;", proximity = "--tw-scroll-snap-strictness: proximity;" }
+"stroke|stroke" = { current = "currentColor;" }
+"text-align|text-align" = { left = "left;", center = "center;", right = "right;", justify = "justify;" }
+"text-color|color" = { transparent = "transparent", current = "currentColor", black = "#000", white = "#fff", "gray-50" = "#f9fafb", "gray-100" = "#f3f4f6", "gray-200" = "#e5e7eb", "gray-300" = "#d1d5db", "gray-400" = "#9ca3af", "gray-500" = "#6b7280", "gray-600" = "#4b5563", "gray-700" = "#374151", "gray-800" = "#1f2937", "gray-900" = "#111827", "red-50" = "#fef2f2", "red-100" = "#fee2e2", "red-200" = "#fecaca", "red-300" = "#fca5a5", "red-400" = "#f87171", "red-500" = "#ef4444", "red-600" = "#dc2626", "red-700" = "#b91c1c", "red-800" = "#991b1b", "red-900" = "#7f1d1d", "yellow-50" = "#fffbeb", "yellow-100" = "#fef3c7", "yellow-200" = "#fde68a", "yellow-300" = "#fcd34d", "yellow-400" = "#fbbf24", "yellow-500" = "#f59e0b", "yellow-600" = "#d97706", "yellow-700" = "#b45309", "yellow-800" = "#92400e", "yellow-900" = "#78350f", "green-50" = "#f0fdf4", "green-100" = "#dcfce7", "green-200" = "#bbf7d0", "green-300" = "#86efac", "green-400" = "#4ade80", "green-500" = "#22c55e", "green-600" = "#16a34a", "green-700" = "#15803d", "green-800" = "#166534", "green-900" = "#14532d", "blue-50" = "#eff6ff", "blue-100" = "#dbeafe", "blue-200" = "#bfdbfe", "blue-300" = "#93c5fd", "blue-400" = "#60a5fa", "blue-500" = "#3b82f6", "blue-600" = "#2563eb", "blue-700" = "#1d4ed8", "blue-800" = "#1e40af", "blue-900" = "#1e3a8a", "indigo-50" = "#eef2ff", "indigo-100" = "#e0e7ff", "indigo-200" = "#c7d2fe", "indigo-300" = "#a5b4fc", "indigo-400" = "#818cf8", "indigo-500" = "#6366f1", "indigo-600" = "#4f46e5", "indigo-700" = "#4338ca", "indigo-800" = "#3730a3", "indigo-900" = "#312e81", "purple-50" = "#f5f3ff", "purple-100" = "#ede9fe", "purple-200" = "#ddd6fe", "purple-300" = "#c4b5fd", "purple-400" = "#a78bfa", "purple-500" = "#8b5cf6", "purple-600" = "#7c3aed", "purple-700" = "#6d28d9", "purple-800" = "#5b21b6", "purple-900" = "#4c1d95", "pink-50" = "#fdf2f8", "pink-100" = "#fce7f3", "pink-200" = "#fbcfe8", "pink-300" = "#f9a8d4", "pink-400" = "#f472b6", "pink-500" = "#ec4899", "pink-600" = "#db2777", "pink-700" = "#be185d", "pink-800" = "#9d174d", "pink-900" = "#831843" }
+"text-fluid|font-size" = { "xs" = "clamp(0.75rem, 1.5vw + 0.5rem, 0.875rem)", "sm" = "clamp(0.875rem, 2vw + 0.5rem, 1rem)", "base" = "clamp(1rem, 2.5vw + 0.5rem, 1.125rem)", "lg" = "clamp(1.125rem, 3vw + 0.5rem, 1.25rem)", "xl" = "clamp(1.25rem, 4vw + 0.5rem, 1.5rem)", "2xl" = "clamp(1.5rem, 5vw + 0.5rem, 1.875rem)", "3xl" = "clamp(1.875rem, 6vw + 0.5rem, 2.25rem)" }
+"text-orientation|text-orientation" = { "mixed" = "mixed", "upright" = "upright", "sideways" = "sideways" }
+"text|font-size" = { xs = "0.75rem;", sm = "0.875rem;", base = "1rem;", lg = "1.125rem;", xl = "1.25rem;", "2xl" = "1.5rem;", "3xl" = "1.875rem;", "4xl" = "2.25rem;", "5xl" = "3rem;", "6xl" = "3.75rem;", "7xl" = "4.5rem;", "8xl" = "6rem;", "9xl" = "8rem;" }
+"to|--tw-gradient-to" = { "current" = "currentColor", black = "#000", white = "#fff", "gray-500" = "#6b7280", "red-500" = "#ef4444", "yellow-500" = "#f59e0b", "green-500" = "#22c55e", "blue-500" = "#3b82f6", "indigo-500" = "#6366f1", "purple-500" = "#8b5cf6", "pink-500" = "#ec4899" }
+"top|top" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", full = "100%;" }
+"touch|touch-action" = { auto = "auto;", none = "none;", "pan-x" = "pan-x;", "pan-left" = "pan-left;", "pan-right" = "pan-right;", "pan-y" = "pan-y;", "pan-up" = "pan-up;", "pan-down" = "pan-down;", "pinch-zoom" = "pinch-zoom;", manipulation = "manipulation;" }
+"tracking|letter-spacing" = { tighter = "-0.05em;", tight = "-0.025em;", normal = "0em;", wide = "0.025em;", wider = "0.05em;", widest = "0.1em;" }
+"transition|transition-property" = { "" = "background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;", none = "none;", all = "all;", colors = "color, background-color, border-color, text-decoration-color, fill, stroke;", opacity = "opacity;", shadow = "box-shadow;", transform = "transform;" }
+"via|--tw-gradient-stops" = { "current" = "var(--tw-gradient-from), currentColor, var(--tw-gradient-to)", black = "var(--tw-gradient-from), #000, var(--tw-gradient-to)", white = "var(--tw-gradient-from), #fff, var(--tw-gradient-to)", "gray-500" = "var(--tw-gradient-from), #6b7280, var(--tw-gradient-to)", "red-500" = "var(--tw-gradient-from), #ef4444, var(--tw-gradient-to)", "yellow-500" = "var(--tw-gradient-from), #f59e0b, var(--tw-gradient-to)", "green-500" = "var(--tw-gradient-from), #22c55e, var(--tw-gradient-to)", "blue-500" = "var(--tw-gradient-from), #3b82f6, var(--tw-gradient-to)", "indigo-500" = "var(--tw-gradient-from), #6366f1, var(--tw-gradient-to)", "purple-500" = "var(--tw-gradient-from), #8b5cf6, var(--tw-gradient-to)", "pink-500" = "var(--tw-gradient-from), #ec4899, var(--tw-gradient-to)" }
+"view-transition|view-transition-name" = { "none" = "none", "slide" = "slide", "fade" = "fade", "scale" = "scale", "flip" = "flip" }
+"w|width" = { auto = "auto;", "1/2" = "50%;", "1/3" = "33.333333%;", "2/3" = "66.666667%;", "1/4" = "25%;", "2/4" = "50%;", "3/4" = "75%;", "1/5" = "20%;", "2/5" = "40%;", "3/5" = "60%;", "4/5" = "80%;", "1/6" = "16.666667%;", "2/6" = "33.333333%;", "3/6" = "50%;", "4/6" = "66.666667%;", "5/6" = "83.333333%;", "1/12" = "8.333333%;", "2/12" = "16.666667%;", "3/12" = "25%;", "4/12" = "33.333333%;", "5/12" = "41.666667%;", "6/12" = "50%;", "7/12" = "58.333333%;", "8/12" = "66.666667%;", "9/12" = "75%;", "10/12" = "83.333333%;", "11/12" = "91.666667%;", full = "100%;", screen = "100vw;", min = "min-content;", max = "max-content;", fit = "fit-content;" }
+"will-change|will-change" = { auto = "auto;", scroll = "scroll-position;", contents = "contents;", transform = "transform;" }
+"z|z-index" = { auto = "auto;" }
+
+# -----------------------------------------------------------------------------
+# [generators]
+# For classes that are generated from any number you want.
+# Format: "prefix|css-property" = { multiplier = <number>, unit = "<css-unit>" }
+# -----------------------------------------------------------------------------
+[generators]
+"-backdrop-hue-rotate|backdrop-filter" = { multiplier = -1, unit = "deg" }
+"-hue-rotate|filter" = { multiplier = -1, unit = "deg" }
+"-m|margin" = { multiplier = -0.25, unit = "rem" }
+"-mb|margin-bottom" = { multiplier = -0.25, unit = "rem" }
+"-ml|margin-left" = { multiplier = -0.25, unit = "rem" }
+"-mr|margin-right" = { multiplier = -0.25, unit = "rem" }
+"-mt|margin-top" = { multiplier = -0.25, unit = "rem" }
+"-rotate|--transform-rotate" = { multiplier = -1, unit = "deg" }
+"-skew-x|--transform-skew-x" = { multiplier = -1, unit = "deg" }
+"-skew-y|--transform-skew-y" = { multiplier = -1, unit = "deg" }
+"-space-x|--space-x-reverse,margin-left" = { multiplier = -0.25, unit = "rem" }
+"-space-y|--space-y-reverse,margin-top" = { multiplier = -0.25, unit = "rem" }
+"-translate-x|--transform-translate-x" = { multiplier = -0.25, unit = "rem" }
+"-translate-y|--transform-translate-y" = { multiplier = -0.25, unit = "rem" }
+"aspect|aspect-ratio" = { multiplier = 1, unit = "" }
+"backdrop-blur|backdrop-filter" = { multiplier = 1, unit = "px" }
+"backdrop-brightness|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-contrast|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-grayscale|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-hue-rotate|backdrop-filter" = { multiplier = 1, unit = "deg" }
+"backdrop-invert|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-opacity|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-saturate|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"backdrop-sepia|backdrop-filter" = { multiplier = 0.01, unit = "" }
+"bg-opacity|--tw-bg-opacity" = { multiplier = 0.01, unit = "" }
+"blur|filter" = { multiplier = 1, unit = "px" }
+"border-b-w|border-bottom-width" = { multiplier = 1, unit = "px" }
+"border-l-w|border-left-width" = { multiplier = 1, unit = "px" }
+"border-opacity|--tw-border-opacity" = { multiplier = 0.01, unit = "" }
+"border-r-w|border-right-width" = { multiplier = 1, unit = "px" }
+"border-spacing-x|border-spacing" = { multiplier = 0.25, unit = "rem" }
+"border-spacing-y|border-spacing" = { multiplier = 0.25, unit = "rem" }
+"border-t-w|border-top-width" = { multiplier = 1, unit = "px" }
+"border-w|border-width" = { multiplier = 1, unit = "px" }
+"brightness|filter" = { multiplier = 0.01, unit = "" }
+"col-end|grid-column-end" = { multiplier = 1, unit = "" }
+"col-span|grid-column" = { multiplier = 1, unit = "" }
+"col-start|grid-column-start" = { multiplier = 1, unit = "" }
+"columns|columns" = { multiplier = 1, unit = "" }
+"contrast|filter" = { multiplier = 0.01, unit = "" }
+"decoration-thickness|text-decoration-thickness" = { multiplier = 1, unit = "px" }
+"delay|transition-delay" = { multiplier = 1, unit = "ms" }
+"divide-opacity|--tw-divide-opacity" = { multiplier = 0.01, unit = "" }
+"divide-x-w|border-left-width" = { multiplier = 1, unit = "px" }
+"divide-y-w|border-top-width" = { multiplier = 1, unit = "px" }
+"drop-shadow|filter" = { multiplier = 1, unit = "px" }
+"duration|transition-duration" = { multiplier = 1, unit = "ms" }
+"fill-w|fill" = { multiplier = 1, unit = "" }
+"flex-basis|flex-basis" = { multiplier = 0.25, unit = "rem" }
+"gap-x|column-gap" = { multiplier = 0.25, unit = "rem" }
+"gap|gap" = { multiplier = 0.25, unit = "rem" }
+"gap-y|row-gap" = { multiplier = 0.25, unit = "rem" }
+"grayscale|filter" = { multiplier = 0.01, unit = "" }
+"grid-cols-fill|grid-template-columns" = { multiplier = 1, unit = "rem" }
+"grid-cols-fit|grid-template-columns" = { multiplier = 1, unit = "rem" }
+"h|height" = { multiplier = 0.25, unit = "rem" }
+"hue-rotate|filter" = { multiplier = 1, unit = "deg" }
+"invert|filter" = { multiplier = 0.01, unit = "" }
+"leading|line-height" = { multiplier = 0.25, unit = "rem" }
+"line-clamp|--webkit-line-clamp" = { multiplier = 1, unit = "" }
+"m|margin" = { multiplier = 0.25, unit = "rem" }
+"max-h|max-height" = { multiplier = 0.25, unit = "rem" }
+"mb|margin-bottom" = { multiplier = 0.25, unit = "rem" }
+"ml|margin-left" = { multiplier = 0.25, unit = "rem" }
+"mr|margin-right" = { multiplier = 0.25, unit = "rem" }
+"mt|margin-top" = { multiplier = 0.25, unit = "rem" }
+"mx|margin-left, margin-right" = { multiplier = 0.25, unit = "rem" }
+"my|margin-top, margin-bottom" = { multiplier = 0.25, unit = "rem" }
+"opacity|opacity" = { multiplier = 0.01, unit = "" }
+"order|order" = { multiplier = 1, unit = "" }
+"outline-offset|outline-offset" = { multiplier = 1, unit = "px" }
+"outline-w|outline-width" = { multiplier = 1, unit = "px" }
+"p|padding" = { multiplier = 0.25, unit = "rem" }
+"pb|padding-bottom" = { multiplier = 0.25, unit = "rem" }
+"pl|padding-left" = { multiplier = 0.25, unit = "rem" }
+"placeholder-opacity|--tw-placeholder-opacity" = { multiplier = 0.01, unit = "" }
+"pr|padding-right" = { multiplier = 0.25, unit = "rem" }
+"pt|padding-top" = { multiplier = 0.25, unit = "rem" }
+"px|padding-left, padding-right" = { multiplier = 0.25, unit = "rem" }
+"py|padding-top, padding-bottom" = { multiplier = 0.25, unit = "rem" }
+"ring-offset-opacity|--tw-ring-offset-opacity" = { multiplier = 0.01, unit = "" }
+"ring-offset-w|--tw-ring-offset-width" = { multiplier = 1, unit = "px" }
+"ring-opacity|--tw-ring-opacity" = { multiplier = 0.01, unit = "" }
+"ring-w|--tw-ring-offset-shadow, --tw-ring-shadow, box-shadow" = { multiplier = 1, unit = "px" }
+"rotate|--transform-rotate" = { multiplier = 1, unit = "deg" }
+"row-end|grid-row-end" = { multiplier = 1, unit = "" }
+"row-span|grid-row" = { multiplier = 1, unit = "" }
+"row-start|grid-row-start" = { multiplier = 1, unit = "" }
+"saturate|filter" = { multiplier = 0.01, unit = "" }
+"scale-x|--transform-scale-x" = { multiplier = 0.01, unit = "" }
+"scale-y|--transform-scale-y" = { multiplier = 0.01, unit = "" }
+"scale|--transform-scale-x, --transform-scale-y" = { multiplier = 0.01, unit = "" }
+"scroll-m|scroll-margin" = { multiplier = 0.25, unit = "rem" }
+"scroll-mb|scroll-margin-bottom" = { multiplier = 0.25, unit = "rem" }
+"scroll-ml|scroll-margin-left" = { multiplier = 0.25, unit = "rem" }
+"scroll-mr|scroll-margin-right" = { multiplier = 0.25, unit = "rem" }
+"scroll-mt|scroll-margin-top" = { multiplier = 0.25, unit = "rem" }
+"scroll-p|scroll-padding" = { multiplier = 0.25, unit = "rem" }
+"scroll-pb|scroll-padding-bottom" = { multiplier = 0.25, unit = "rem" }
+"scroll-pl|scroll-padding-left" = { multiplier = 0.25, unit = "rem" }
+"scroll-pr|scroll-padding-right" = { multiplier = 0.25, unit = "rem" }
+"scroll-pt|scroll-padding-top" = { multiplier = 0.25, unit = "rem" }
+"sepia|filter" = { multiplier = 0.01, unit = "" }
+"shadow-opacity|--tw-shadow-opacity" = { multiplier = 0.01, unit = "" }
+"skew-x|--transform-skew-x" = { multiplier = 1, unit = "deg" }
+"skew-y|--transform-skew-y" = { multiplier = 1, unit = "deg" }
+"space-x|--space-x-reverse,margin-left" = { multiplier = 0.25, unit = "rem" }
+"space-y|--space-y-reverse,margin-top" = { multiplier = 0.25, unit = "rem" }
+"stroke-w|stroke-width" = { multiplier = 1, unit = "" }
+"text-opacity|--tw-text-opacity" = { multiplier = 0.01, unit = "" }
+"translate-x|--transform-translate-x" = { multiplier = 0.25, unit = "rem" }
+"translate-y|--transform-translate-y" = { multiplier = 0.25, unit = "rem" }
+"underline-offset|text-underline-offset" = { multiplier = 1, unit = "px" }
+"w|width" = { multiplier = 0.25, unit = "rem" }
+"z|z-index" = { multiplier = 10, unit = "" }
+
+# -----------------------------------------------------------------------------
+# [colors]
+# For colors for text and bg.
+# Format: "color-name" = { oklch color value }
+# -----------------------------------------------------------------------------
+[colors]
+red-50 = "oklch(0.971 0.013 17.38)"
+red-100 = "oklch(0.936 0.032 17.717)"
+red-200 = "oklch(0.885 0.062 18.334)"
+red-300 = "oklch(0.808 0.114 19.571)"
+red-400 = "oklch(0.704 0.191 22.216)"
+red-500 = "oklch(0.637 0.237 25.331)"
+red-600 = "oklch(0.577 0.245 27.325)"
+red-700 = "oklch(0.505 0.213 27.518)"
+red-800 = "oklch(0.444 0.177 26.899)"
+red-900 = "oklch(0.396 0.141 25.723)"
+red-950 = "oklch(0.258 0.092 26.042)"
+orange-50 = "oklch(0.98 0.016 73.684)"
+orange-100 = "oklch(0.954 0.038 75.164)"
+orange-200 = "oklch(0.901 0.076 70.697)"
+orange-300 = "oklch(0.837 0.128 66.29)"
+orange-400 = "oklch(0.75 0.183 55.934)"
+orange-500 = "oklch(0.705 0.213 47.604)"
+orange-600 = "oklch(0.646 0.222 41.116)"
+orange-700 = "oklch(0.553 0.195 38.402)"
+orange-800 = "oklch(0.47 0.157 37.304)"
+orange-900 = "oklch(0.408 0.123 38.172)"
+orange-950 = "oklch(0.266 0.079 36.259)"
+amber-50 = "oklch(0.987 0.022 95.277)"
+amber-100 = "oklch(0.962 0.059 95.617)"
+amber-200 = "oklch(0.924 0.12 95.746)"
+amber-300 = "oklch(0.879 0.169 91.605)"
+amber-400 = "oklch(0.828 0.189 84.429)"
+amber-500 = "oklch(0.769 0.188 70.08)"
+amber-600 = "oklch(0.666 0.179 58.318)"
+amber-700 = "oklch(0.555 0.163 48.998)"
+amber-800 = "oklch(0.473 0.137 46.201)"
+amber-900 = "oklch(0.414 0.112 45.904)"
+amber-950 = "oklch(0.279 0.077 45.635)"
+yellow-50 = "oklch(0.987 0.026 102.212)"
+yellow-100 = "oklch(0.973 0.071 103.193)"
+yellow-200 = "oklch(0.945 0.129 101.54)"
+yellow-300 = "oklch(0.905 0.182 98.111)"
+yellow-400 = "oklch(0.852 0.199 91.936)"
+yellow-500 = "oklch(0.795 0.184 86.047)"
+yellow-600 = "oklch(0.681 0.162 75.834)"
+yellow-700 = "oklch(0.554 0.135 66.442)"
+yellow-800 = "oklch(0.476 0.114 61.907)"
+yellow-900 = "oklch(0.421 0.095 57.708)"
+yellow-950 = "oklch(0.286 0.066 53.813)"
+lime-50 = "oklch(0.986 0.031 120.757)"
+lime-100 = "oklch(0.967 0.067 122.328)"
+lime-200 = "oklch(0.938 0.127 124.321)"
+lime-300 = "oklch(0.897 0.196 126.665)"
+lime-400 = "oklch(0.841 0.238 128.85)"
+lime-500 = "oklch(0.768 0.233 130.85)"
+lime-600 = "oklch(0.648 0.2 131.684)"
+lime-700 = "oklch(0.532 0.157 131.589)"
+lime-800 = "oklch(0.453 0.124 130.933)"
+lime-900 = "oklch(0.405 0.101 131.063)"
+lime-950 = "oklch(0.274 0.072 132.109)"
+green-50 = "oklch(0.982 0.018 155.826)"
+green-100 = "oklch(0.962 0.044 156.743)"
+green-200 = "oklch(0.925 0.084 155.995)"
+green-300 = "oklch(0.871 0.15 154.449)"
+green-400 = "oklch(0.792 0.209 151.711)"
+green-500 = "oklch(0.723 0.219 149.579)"
+green-600 = "oklch(0.627 0.194 149.214)"
+green-700 = "oklch(0.527 0.154 150.069)"
+green-800 = "oklch(0.448 0.119 151.328)"
+green-900 = "oklch(0.393 0.095 152.535)"
+green-950 = "oklch(0.266 0.065 152.934)"
+emerald-50 = "oklch(0.979 0.021 166.113)"
+emerald-100 = "oklch(0.95 0.052 163.051)"
+emerald-200 = "oklch(0.905 0.093 164.15)"
+emerald-300 = "oklch(0.845 0.143 164.978)"
+emerald-400 = "oklch(0.765 0.177 163.223)"
+emerald-500 = "oklch(0.696 0.17 162.48)"
+emerald-600 = "oklch(0.596 0.145 163.225)"
+emerald-700 = "oklch(0.508 0.118 165.612)"
+emerald-800 = "oklch(0.432 0.095 166.913)"
+emerald-900 = "oklch(0.378 0.077 168.94)"
+emerald-950 = "oklch(0.262 0.051 172.552)"
+teal-50 = "oklch(0.984 0.014 180.72)"
+teal-100 = "oklch(0.953 0.051 180.801)"
+teal-200 = "oklch(0.91 0.096 180.426)"
+teal-300 = "oklch(0.855 0.138 181.071)"
+teal-400 = "oklch(0.777 0.152 181.912)"
+teal-500 = "oklch(0.704 0.14 182.503)"
+teal-600 = "oklch(0.6 0.118 184.704)"
+teal-700 = "oklch(0.511 0.096 186.391)"
+teal-800 = "oklch(0.437 0.078 188.216)"
+teal-900 = "oklch(0.386 0.063 188.416)"
+teal-950 = "oklch(0.277 0.046 192.524)"
+cyan-50 = "oklch(0.984 0.019 200.873)"
+cyan-100 = "oklch(0.956 0.045 203.388)"
+cyan-200 = "oklch(0.917 0.08 205.041)"
+cyan-300 = "oklch(0.865 0.127 207.078)"
+cyan-400 = "oklch(0.789 0.154 211.53)"
+cyan-500 = "oklch(0.715 0.143 215.221)"
+cyan-600 = "oklch(0.609 0.126 221.723)"
+cyan-700 = "oklch(0.52 0.105 223.128)"
+cyan-800 = "oklch(0.45 0.085 224.283)"
+cyan-900 = "oklch(0.398 0.07 227.392)"
+cyan-950 = "oklch(0.302 0.056 229.695)"
+sky-50 = "oklch(0.977 0.013 236.62)"
+sky-100 = "oklch(0.951 0.026 236.824)"
+sky-200 = "oklch(0.901 0.058 230.902)"
+sky-300 = "oklch(0.828 0.111 230.318)"
+sky-400 = "oklch(0.746 0.16 232.661)"
+sky-500 = "oklch(0.685 0.169 237.323)"
+sky-600 = "oklch(0.588 0.158 241.966)"
+sky-700 = "oklch(0.5 0.134 242.749)"
+sky-800 = "oklch(0.443 0.11 240.79)"
+sky-900 = "oklch(0.391 0.09 240.876)"
+sky-950 = "oklch(0.293 0.066 243.157)"
+blue-50 = "oklch(0.97 0.014 254.604)"
+blue-100 = "oklch(0.932 0.032 255.585)"
+blue-200 = "oklch(0.882 0.059 254.128)"
+blue-300 = "oklch(0.809 0.105 251.813)"
+blue-400 = "oklch(0.707 0.165 254.624)"
+blue-500 = "oklch(0.623 0.214 259.815)"
+blue-600 = "oklch(0.546 0.245 262.881)"
+blue-700 = "oklch(0.488 0.243 264.376)"
+blue-800 = "oklch(0.424 0.199 265.638)"
+blue-900 = "oklch(0.379 0.146 265.522)"
+blue-950 = "oklch(0.282 0.091 267.935)"
+indigo-50 = "oklch(0.962 0.018 272.314)"
+indigo-100 = "oklch(0.93 0.034 272.788)"
+indigo-200 = "oklch(0.87 0.065 274.039)"
+indigo-300 = "oklch(0.785 0.115 274.713)"
+indigo-400 = "oklch(0.673 0.182 276.935)"
+indigo-500 = "oklch(0.585 0.233 277.117)"
+indigo-600 = "oklch(0.511 0.262 276.966)"
+indigo-700 = "oklch(0.457 0.24 277.023)"
+indigo-800 = "oklch(0.398 0.195 277.366)"
+indigo-900 = "oklch(0.359 0.144 278.697)"
+indigo-950 = "oklch(0.257 0.09 281.288)"
+violet-50 = "oklch(0.969 0.016 293.756)"
+violet-100 = "oklch(0.943 0.029 294.588)"
+violet-200 = "oklch(0.894 0.057 293.283)"
+violet-300 = "oklch(0.811 0.111 293.571)"
+violet-400 = "oklch(0.702 0.183 293.541)"
+violet-500 = "oklch(0.606 0.25 292.717)"
+violet-600 = "oklch(0.541 0.281 293.009)"
+violet-700 = "oklch(0.491 0.27 292.581)"
+violet-800 = "oklch(0.432 0.232 292.759)"
+violet-900 = "oklch(0.38 0.189 293.745)"
+violet-950 = "oklch(0.283 0.141 291.089)"
+purple-50 = "oklch(0.977 0.014 308.299)"
+purple-100 = "oklch(0.946 0.033 307.174)"
+purple-200 = "oklch(0.902 0.063 306.703)"
+purple-300 = "oklch(0.827 0.119 306.383)"
+purple-400 = "oklch(0.714 0.203 305.504)"
+purple-500 = "oklch(0.627 0.265 303.9)"
+purple-600 = "oklch(0.558 0.288 302.321)"
+purple-700 = "oklch(0.496 0.265 301.924)"
+purple-800 = "oklch(0.438 0.218 303.724)"
+purple-900 = "oklch(0.381 0.176 304.987)"
+purple-950 = "oklch(0.291 0.149 302.717)"
+fuchsia-50 = "oklch(0.977 0.017 320.058)"
+fuchsia-100 = "oklch(0.952 0.037 318.852)"
+fuchsia-200 = "oklch(0.903 0.076 319.62)"
+fuchsia-300 = "oklch(0.833 0.145 321.434)"
+fuchsia-400 = "oklch(0.74 0.238 322.16)"
+fuchsia-500 = "oklch(0.667 0.295 322.15)"
+fuchsia-600 = "oklch(0.591 0.293 322.896)"
+fuchsia-700 = "oklch(0.518 0.253 323.949)"
+fuchsia-800 = "oklch(0.452 0.211 324.591)"
+fuchsia-900 = "oklch(0.401 0.17 325.612)"
+fuchsia-950 = "oklch(0.293 0.136 325.661)"
+pink-50 = "oklch(0.971 0.014 343.198)"
+pink-100 = "oklch(0.948 0.028 342.258)"
+pink-200 = "oklch(0.899 0.061 343.231)"
+pink-300 = "oklch(0.823 0.12 346.018)"
+pink-400 = "oklch(0.718 0.202 349.761)"
+pink-500 = "oklch(0.656 0.241 354.308)"
+pink-600 = "oklch(0.592 0.249 0.584)"
+pink-700 = "oklch(0.525 0.223 3.958)"
+pink-800 = "oklch(0.459 0.187 3.815)"
+pink-900 = "oklch(0.408 0.153 2.432)"
+pink-950 = "oklch(0.284 0.109 3.907)"
+rose-50 = "oklch(0.969 0.015 12.422)"
+rose-100 = "oklch(0.941 0.03 12.58)"
+rose-200 = "oklch(0.892 0.058 10.001)"
+rose-300 = "oklch(0.81 0.117 11.638)"
+rose-400 = "oklch(0.712 0.194 13.428)"
+rose-500 = "oklch(0.645 0.246 16.439)"
+rose-600 = "oklch(0.586 0.253 17.585)"
+rose-700 = "oklch(0.514 0.222 16.935)"
+rose-800 = "oklch(0.455 0.188 13.697)"
+rose-900 = "oklch(0.41 0.159 10.272)"
+rose-950 = "oklch(0.271 0.105 12.094)"
+slate-50 = "oklch(0.984 0.003 247.858)"
+slate-100 = "oklch(0.968 0.007 247.896)"
+slate-200 = "oklch(0.929 0.013 255.508)"
+slate-300 = "oklch(0.869 0.022 252.894)"
+slate-400 = "oklch(0.704 0.04 256.788)"
+slate-500 = "oklch(0.554 0.046 257.417)"
+slate-600 = "oklch(0.446 0.043 257.281)"
+slate-700 = "oklch(0.372 0.044 257.287)"
+slate-800 = "oklch(0.279 0.041 260.031)"
+slate-900 = "oklch(0.208 0.042 265.755)"
+slate-950 = "oklch(0.129 0.042 264.695)"
+gray-50 = "oklch(0.985 0.002 247.839)"
+gray-100 = "oklch(0.967 0.003 264.542)"
+gray-200 = "oklch(0.928 0.006 264.531)"
+gray-300 = "oklch(0.872 0.01 258.338)"
+gray-400 = "oklch(0.707 0.022 261.325)"
+gray-500 = "oklch(0.551 0.027 264.364)"
+gray-600 = "oklch(0.446 0.03 256.802)"
+gray-700 = "oklch(0.373 0.034 259.733)"
+gray-800 = "oklch(0.278 0.033 256.848)"
+gray-900 = "oklch(0.21 0.034 264.665)"
+gray-950 = "oklch(0.13 0.028 261.692)"
+zinc-50 = "oklch(0.985 0 0)"
+zinc-100 = "oklch(0.967 0.001 286.375)"
+zinc-200 = "oklch(0.92 0.004 286.32)"
+zinc-300 = "oklch(0.871 0.006 286.286)"
+zinc-400 = "oklch(0.705 0.015 286.067)"
+zinc-500 = "oklch(0.552 0.016 285.938)"
+zinc-600 = "oklch(0.442 0.017 285.786)"
+zinc-700 = "oklch(0.37 0.013 285.805)"
+zinc-800 = "oklch(0.274 0.006 286.033)"
+zinc-900 = "oklch(0.21 0.006 285.885)"
+zinc-950 = "oklch(0.141 0.005 285.823)"
+neutral-50 = "oklch(0.985 0 0)"
+neutral-100 = "oklch(0.97 0 0)"
+neutral-200 = "oklch(0.922 0 0)"
+neutral-300 = "oklch(0.87 0 0)"
+neutral-400 = "oklch(0.708 0 0)"
+neutral-500 = "oklch(0.556 0 0)"
+neutral-600 = "oklch(0.439 0 0)"
+neutral-700 = "oklch(0.371 0 0)"
+neutral-800 = "oklch(0.269 0 0)"
+neutral-900 = "oklch(0.205 0 0)"
+neutral-950 = "oklch(0.145 0 0)"
+stone-50 = "oklch(0.985 0.001 106.423)"
+stone-100 = "oklch(0.97 0.001 106.424)"
+stone-200 = "oklch(0.923 0.003 48.717)"
+stone-300 = "oklch(0.869 0.005 56.366)"
+stone-400 = "oklch(0.709 0.01 56.259)"
+stone-500 = "oklch(0.553 0.013 58.071)"
+stone-600 = "oklch(0.444 0.011 73.639)"
+stone-700 = "oklch(0.374 0.01 67.558)"
+stone-800 = "oklch(0.268 0.007 34.298)"
+stone-900 = "oklch(0.216 0.006 56.043)"
+stone-950 = "oklch(0.147 0.004 49.25)"
