@@ -229,40 +229,103 @@ fn main() {
         .watch(&dir_canonical, RecursiveMode::Recursive)
         .expect("Failed to start watcher");
 
+    // Keep track of last processed file content hash to skip identical edits
+    let mut file_content_hashes: HashMap<PathBuf, u64> = HashMap::new();
+    // Last processed time to debounce rapid edits
+    let mut last_processed_time: HashMap<PathBuf, Instant> = HashMap::new();
+
     for res in rx {
         match res {
             Ok(events) => {
+                // Group events by path to avoid processing the same file multiple times
+                let mut path_events: HashMap<PathBuf, notify::event::EventKind> = HashMap::new();
+
                 for event in events {
                     if matches!(event.kind, notify::event::EventKind::Access(_)) {
                         continue;
                     }
+
                     for raw_path in &event.paths {
                         let path = raw_path.canonicalize().unwrap_or_else(|_| raw_path.clone());
                         if utils::is_code_file(&path) && path != output_file {
-                            if matches!(event.kind, notify::event::EventKind::Remove(_)) {
-                                watcher::process_file_remove(
-                                    &cache,
-                                    &path,
-                                    &mut file_classnames_ids,
-                                    &mut classname_counts_ids,
-                                    &mut global_classnames_ids,
-                                    &mut interner,
-                                    &output_file,
-                                    &style_engine,
-                                );
-                            } else {
-                                watcher::process_file_change(
-                                    &cache,
-                                    &path,
-                                    &mut file_classnames_ids,
-                                    &mut classname_counts_ids,
-                                    &mut global_classnames_ids,
-                                    &mut interner,
-                                    &output_file,
-                                    &style_engine,
-                                );
+                            // Keep the most significant event (Remove > Modify > Create)
+                            if let Some(existing_kind) = path_events.get(&path) {
+                                if matches!(existing_kind, notify::event::EventKind::Remove(_)) {
+                                    // Remove is already the most significant
+                                    continue;
+                                }
+                                if matches!(existing_kind, notify::event::EventKind::Modify(_))
+                                    && !matches!(event.kind, notify::event::EventKind::Remove(_))
+                                {
+                                    // Keep Modify over anything but Remove
+                                    continue;
+                                }
                             }
+                            path_events.insert(path, event.kind);
                         }
+                    }
+                }
+
+                // Process events by path
+                for (path, kind) in path_events {
+                    // Debounce rapid changes to the same file
+                    let now = Instant::now();
+                    let should_process = match last_processed_time.get(&path) {
+                        Some(last_time) => now.duration_since(*last_time) > Duration::from_millis(5),
+                        None => true,
+                    };
+
+                    if !should_process {
+                        continue;
+                    }
+
+                    // Skip processing if file content hasn't changed
+                    if !matches!(kind, notify::event::EventKind::Remove(_)) {
+                        if let Ok(content) = std::fs::read(&path) {
+                            let mut hasher = SeaHasher::new();
+                            hasher.write(&content);
+                            let content_hash = hasher.finish();
+
+                            if let Some(&prev_hash) = file_content_hashes.get(&path) {
+                                if prev_hash == content_hash {
+                                    // Content unchanged, skip processing
+                                    continue;
+                                }
+                            }
+
+                            file_content_hashes.insert(path.clone(), content_hash);
+                        }
+                    } else {
+                        // For removed files, clear the hash
+                        file_content_hashes.remove(&path);
+                    }
+
+                    // Update last processed time
+                    last_processed_time.insert(path.clone(), now);
+
+                    // Process the event
+                    if matches!(kind, notify::event::EventKind::Remove(_)) {
+                        watcher::process_file_remove(
+                            &cache,
+                            &path,
+                            &mut file_classnames_ids,
+                            &mut classname_counts_ids,
+                            &mut global_classnames_ids,
+                            &mut interner,
+                            &output_file,
+                            &style_engine,
+                        );
+                    } else {
+                        watcher::process_file_change(
+                            &cache,
+                            &path,
+                            &mut file_classnames_ids,
+                            &mut classname_counts_ids,
+                            &mut global_classnames_ids,
+                            &mut interner,
+                            &output_file,
+                            &style_engine,
+                        );
                     }
                 }
             }
