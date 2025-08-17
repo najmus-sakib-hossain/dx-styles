@@ -40,15 +40,18 @@ pub fn process_file_change(
     );
     let update_maps_duration = update_maps_start.elapsed();
 
-    let generate_start = Instant::now();
-    generator::generate_css_ids(
-        global_classnames_ids,
-        output_path,
-        style_engine,
-        interner,
-        false,
-    );
-    let generate_css_duration = generate_start.elapsed();
+    let mut generate_css_duration = Duration::new(0, 0);
+    if added_global > 0 || removed_global > 0 || added_file > 0 || removed_file > 0 {
+        let generate_start = Instant::now();
+        generator::generate_css_ids(
+            global_classnames_ids,
+            output_path,
+            style_engine,
+            interner,
+            false,
+        );
+        generate_css_duration = generate_start.elapsed();
+    }
 
     let cache_write_start = Instant::now();
     let mut back_to_strings: HashSet<String> = HashSet::new();
@@ -66,20 +69,21 @@ pub fn process_file_change(
         cache_write,
     };
 
-    if added_file > 0 || removed_file > 0 || added_global > 0 || removed_global > 0 {
-        utils::log_change(
-            "✓",
-            path,
-            added_file,
-            removed_file,
-            output_path,
-            added_global,
-            removed_global,
-            timings,
-        );
-    } else {
-        println!("✓ {} (no class changes)", path.display());
+    // Only log when there were actual classname mutations; otherwise remain silent
+    // to keep noise low AND because we now can skip CSS regeneration entirely.
+    if added_file == 0 && removed_file == 0 && added_global == 0 && removed_global == 0 {
+        return;
     }
+    utils::log_change(
+        "✓",
+        path,
+        added_file,
+        removed_file,
+        output_path,
+        added_global,
+        removed_global,
+        timings,
+    );
 }
 
 pub fn process_file_remove(
