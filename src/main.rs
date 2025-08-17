@@ -9,6 +9,8 @@ mod parser;
 mod utils;
 mod watcher;
 
+use std::hash::Hasher;
+use seahash::SeaHasher;
 use crate::cache::ClassnameCache;
 use colored::Colorize;
 use notify::RecursiveMode;

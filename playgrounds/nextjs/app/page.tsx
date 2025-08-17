@@ -2,11 +2,11 @@ export default function Home() {
   return (
     <main
       className="
-        bg-yellow-500 min-h-screen w-screen p-10 text-white-800
-        lg(p-3)
+        bg-blue-500 min-h-screen w-screen p-12 text-white-800
+        lg(p-74)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)
-        animate:1s from(opacity-0) to(opacity-100) forwards
+        animate:2s from(opacity-0) to(opacity-100) forwards
       "
     >
       <div className="max-w-5xl mx-auto">
