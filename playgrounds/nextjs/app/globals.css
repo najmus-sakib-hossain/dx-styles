@@ -145,7 +145,7 @@
 }
 
 @media (min-width: 1024px) {
-  .lg\(p-21\) {
-    padding: 5.25rem;
+  .lg\(p-80\) {
+    padding: 20rem;
   }
 }
