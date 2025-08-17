@@ -19,6 +19,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 static NORMALIZE_CACHE: Lazy<Mutex<LruCache<u64, Arc<String>>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(4096).unwrap())));
 
+static NORMALIZED_CSS_CACHE: Lazy<Mutex<LruCache<u32, Arc<String>>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())));
+
 static EMITTED_KEYS: Lazy<RwLock<std::collections::HashSet<String>>> =
     Lazy::new(|| RwLock::new(std::collections::HashSet::new()));
 
@@ -827,20 +830,21 @@ pub fn generate_css_ids(
 
     let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
     sorted.sort_unstable();
-    let class_strings: Vec<String> = sorted
-        .iter()
-        .map(|id| interner.get(*id).to_string())
-        .collect();
-    let refs: Vec<&str> = class_strings.iter().map(|s| s.as_str()).collect();
-    let css_rule_strings: Vec<String> = engine.generate_css_for_classes_batch(&refs);
-
-    if css_rule_strings.is_empty() {
-        crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
-        return;
-    }
 
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
     if is_production {
+        let class_strings: Vec<String> = sorted
+            .iter()
+            .map(|id| interner.get(*id).to_string())
+            .collect();
+        let refs: Vec<&str> = class_strings.iter().map(|s| s.as_str()).collect();
+        let css_rule_strings: Vec<String> = engine.generate_css_for_classes_batch(&refs);
+
+        if css_rule_strings.is_empty() {
+            crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+            return;
+        }
+
         let css_rule_strings: Vec<String> = css_rule_strings
             .into_iter()
             .map(|r| normalize_generated_css(&r))
@@ -866,11 +870,57 @@ pub fn generate_css_ids(
         return;
     }
 
-    let normalized: Vec<String> = css_rule_strings
+    // Dev path
+    let mut normalized_blocks: Vec<Option<Arc<String>>> = vec![None; sorted.len()];
+    let mut missing_indices = Vec::new();
+    {
+        let mut cache = NORMALIZED_CSS_CACHE.lock().unwrap();
+        for (i, id) in sorted.iter().enumerate() {
+            if let Some(css) = cache.get(id) {
+                normalized_blocks[i] = Some(Arc::clone(css));
+            } else {
+                missing_indices.push(i);
+            }
+        }
+    }
+
+    if !missing_indices.is_empty() {
+        let missing_ids: Vec<u32> = missing_indices.iter().map(|&i| sorted[i]).collect();
+        let missing_class_strings: Vec<String> = missing_ids
+            .iter()
+            .map(|id| interner.get(*id).to_string())
+            .collect();
+        let missing_refs: Vec<&str> = missing_class_strings.iter().map(|s| s.as_str()).collect();
+        let new_css_rules = engine.generate_css_for_classes_batch(&missing_refs);
+
+        let new_normalized: Vec<String> = new_css_rules
+            .par_iter()
+            .map(|r| normalize_generated_css(r))
+            .collect();
+
+        {
+            let mut cache = NORMALIZED_CSS_CACHE.lock().unwrap();
+            for (i, css) in missing_indices.iter().zip(new_normalized.iter()) {
+                if !css.trim().is_empty() {
+                    let id = sorted[*i];
+                    let arc_css = Arc::new(css.clone());
+                    cache.put(id, Arc::clone(&arc_css));
+                    normalized_blocks[*i] = Some(arc_css);
+                }
+            }
+        }
+    }
+
+    let sorted_blocks: Vec<String> = normalized_blocks
         .into_iter()
-        .map(|r| normalize_generated_css(&r))
+        .filter_map(|opt| opt.map(|arc| (*arc).clone()))
         .collect();
-    let sorted_blocks = sort_css_blocks(normalized);
+
+    if sorted_blocks.is_empty() {
+        crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
+        return;
+    }
+
     let mut aggregate = String::with_capacity(sorted_blocks.iter().map(|r| r.len() + 2).sum());
     for (i, rule) in sorted_blocks.iter().enumerate() {
         if i > 0 {
