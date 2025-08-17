@@ -812,24 +812,21 @@ pub fn generate_css_ids(
     static LAST_IDS_HASH: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
     static LAST_IDS_COUNT: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(usize::MAX));
 
-    // FNV-1a style fold for order-independent set hash (using XOR+mul would
-    // be order-dependent; we canonicalize by combining commutatively via add).
-    // We choose multiplication by a large odd prime then add id to mix.
-    let mut hash: u64 = 1469598103934665603; // FNV offset basis
-    for id in class_ids.iter() {
-        hash = hash.wrapping_mul(1099511628211).wrapping_add(*id as u64);
-    }
+    let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
+    sorted.sort_unstable();
+
+    let mut hasher = SeaHasher::new();
+    std::hash::Hash::hash_slice(&sorted, &mut hasher);
+    let hash = hasher.finish();
+
     let prev_count = LAST_IDS_COUNT.load(Ordering::Relaxed);
     let prev_hash = LAST_IDS_HASH.load(Ordering::Relaxed);
-    if prev_count == class_ids.len() && prev_hash == hash {
+    if prev_count == sorted.len() && prev_hash == hash {
         // No changes in the global class ID set; skip all work.
         return;
     }
-    LAST_IDS_COUNT.store(class_ids.len(), Ordering::Relaxed);
+    LAST_IDS_COUNT.store(sorted.len(), Ordering::Relaxed);
     LAST_IDS_HASH.store(hash, Ordering::Relaxed);
-
-    let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
-    sorted.sort_unstable();
 
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
     if is_production {
@@ -892,6 +889,7 @@ pub fn generate_css_ids(
             .collect();
         let missing_refs: Vec<&str> = missing_class_strings.iter().map(|s| s.as_str()).collect();
         let new_css_rules = engine.generate_css_for_classes_batch(&missing_refs);
+        engine.prewarm(interner);
 
         let new_normalized: Vec<String> = new_css_rules
             .par_iter()
@@ -911,23 +909,32 @@ pub fn generate_css_ids(
         }
     }
 
-    let sorted_blocks: Vec<String> = normalized_blocks
-        .into_iter()
-        .filter_map(|opt| opt.map(|arc| (*arc).clone()))
-        .collect();
+    let mut capacity = 0;
+    let mut has_content = false;
+    for block_opt in &normalized_blocks {
+        if let Some(css_arc) = block_opt {
+            capacity += css_arc.len() + 2;
+            has_content = true;
+        }
+    }
 
-    if sorted_blocks.is_empty() {
+    if !has_content {
         crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
         return;
     }
 
-    let mut aggregate = String::with_capacity(sorted_blocks.iter().map(|r| r.len() + 2).sum());
-    for (i, rule) in sorted_blocks.iter().enumerate() {
-        if i > 0 {
-            aggregate.push_str("\n\n");
+    let mut aggregate = String::with_capacity(capacity);
+    let mut first = true;
+    for block_opt in normalized_blocks {
+        if let Some(css_arc) = block_opt {
+            if !first {
+                aggregate.push_str("\n\n");
+            }
+            aggregate.push_str(&css_arc);
+            first = false;
         }
-        aggregate.push_str(rule);
     }
+
     let aggregate = condense_blank_lines(&aggregate);
     if let Ok(existing) = std::fs::read_to_string(output_path) {
         if existing == aggregate {

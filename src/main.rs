@@ -179,7 +179,6 @@ fn main() {
                 &interner,
                 true,
             );
-            style_engine.prewarm(&interner);
             let generate_duration = generate_start.elapsed();
             let total_duration = scan_start.elapsed();
             let parse_and_update_duration = total_duration.saturating_sub(generate_duration);
@@ -270,4 +269,5 @@ fn main() {
             Err(e) => println!("Watch error: {:?}", e),
         }
     }
+}
 }
