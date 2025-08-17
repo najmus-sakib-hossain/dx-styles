@@ -1,6 +1,9 @@
 # Dx
 Enhance Developer Experience
 
+git config --global user.name "najmus-sakib-hossain"
+git config --global user.email "manfromexistence@proton.me"
+
 for file in $(ls *.rs | grep -v -E 'main.rs|lib.rs'); do dir_name="${file%.rs}"; mkdir "$dir_name"; mv "$file" "$dir_name/mod.rs"; done
 
 ```md
