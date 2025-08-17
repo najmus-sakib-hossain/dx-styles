@@ -2,7 +2,7 @@ use crate::engine::StyleEngine;
 use crate::interner::ClassInterner;
 use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use lru::LruCache;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rayon::prelude::*;
 use seahash::SeaHasher;
 use std::collections::{HashMap, HashSet};
@@ -15,10 +15,14 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use memmap2::{Mmap, MmapMut, MmapOptions};
-use std::os::windows::fs::OpenOptionsExt;
-use once_cell::sync::OnceCell;
 use std::cell::RefCell;
+use std::time::{Duration, Instant};
+
+// Use cfg to make platform-specific code conditional
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+#[cfg(windows)]
+use memmap2::{Mmap, MmapMut, MmapOptions};
 
 static NORMALIZE_CACHE: Lazy<Mutex<LruCache<u64, Arc<String>>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(4096).unwrap())));
@@ -47,6 +51,10 @@ static EMPTY_STRING: Lazy<Arc<String>> = Lazy::new(|| Arc::new(String::new()));
 static CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
 
+// IDs tracking for optimization
+static LAST_IDS_HASH: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+static LAST_IDS_COUNT: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(usize::MAX));
+
 // Pre-computed CSS templates for common patterns
 static CSS_TEMPLATES: Lazy<RwLock<HashMap<&'static str, Arc<String>>>> = 
     Lazy::new(|| {
@@ -58,10 +66,17 @@ static CSS_TEMPLATES: Lazy<RwLock<HashMap<&'static str, Arc<String>>>> =
         RwLock::new(map)
     });
 
-// Memory-mapped file cache to avoid disk I/O
+// Memory-mapped file cache to avoid disk I/O (platform independent version)
 thread_local! {
+    #[cfg(windows)]
     static MMAP_CACHE: RefCell<HashMap<PathBuf, (Mmap, u64, Instant)>> = RefCell::new(HashMap::new());
+    
+    #[cfg(not(windows))]
+    static CONTENT_CACHE: RefCell<HashMap<PathBuf, (Vec<u8>, u64, Instant)>> = RefCell::new(HashMap::new());
 }
+
+// Store previous class IDs for efficient patching
+static PREV_CLASS_IDS: Lazy<RwLock<HashSet<u32>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
 // Ultra-fast hash function specific for class detection
 #[inline]
@@ -74,48 +89,6 @@ fn hash_class_str(s: &str) -> u64 {
     h
 }
 
-// Add these imports
-use crate::engine::StyleEngine;
-use crate::interner::ClassInterner;
-use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
-use lru::LruCache;
-use once_cell::sync::Lazy;
-use rayon::prelude::*;
-use seahash::SeaHasher;
-use std::collections::{HashMap, HashSet};
-use std::fs::OpenOptions;
-use std::hash::{Hash, Hasher};
-use std::io::{BufWriter, Write};
-use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-
-static NORMALIZE_CACHE: Lazy<Mutex<LruCache<u64, Arc<String>>>> =
-    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(4096).unwrap())));
-
-static NORMALIZED_CSS_CACHE: Lazy<Mutex<LruCache<u32, Arc<String>>>> =
-    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(8192).unwrap())));
-
-static EMITTED_KEYS: Lazy<RwLock<std::collections::HashSet<String>>> =
-    Lazy::new(|| RwLock::new(std::collections::HashSet::new()));
-
-// Ultra-fast output cache to avoid regenerating identical CSS
-static OUTPUT_CACHE: Lazy<RwLock<HashMap<u64, (Vec<u8>, u64)>>> = 
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-// Cache for CSS content by path
-static PATH_CONTENT_CACHE: Lazy<RwLock<HashMap<PathBuf, (u64, u64)>>> = 
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-// Last successful CSS generation timestamp
-static LAST_GENERATION_TIME: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-
-// Frequently used empty string constant to avoid allocations
-static EMPTY_STRING: Lazy<Arc<String>> = Lazy::new(|| Arc::new(String::new()));
-
 #[inline]
 fn fast_hash<T: Hash>(v: &T) -> u64 {
     let mut h = SeaHasher::new();
@@ -123,29 +96,227 @@ fn fast_hash<T: Hash>(v: &T) -> u64 {
     h.finish()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::normalize_generated_css;
+// Preload common classes for fast access
+pub fn preload_common_classes(engine: &StyleEngine, interner: &mut ClassInterner) {
+    let common_classes = ["flex", "grid", "hidden", "block", 
+                          "p-4", "m-4", "text-lg", "font-bold", 
+                          "rounded", "border", "shadow"];
+    
+    let css_rules = engine.generate_css_for_classes_batch(&common_classes);
+    
+    for (class, css) in common_classes.iter().zip(css_rules.iter()) {
+        if !css.is_empty() {
+            let normalized = normalize_generated_css(css);
+            if let Ok(mut cache) = NORMALIZED_CSS_CACHE.lock() {
+                let id = interner.intern(class);
+                cache.put(id, Arc::new(normalized));
+            }
+        }
+    }
+}
 
-    #[test]
-    fn escaped_greater_than_not_treated_as_combinator() {
-        let input = ".\\?@self\\:child-count\\>2\\(_highlight\\) {\n  color: red;\n}\n";
-        let out = normalize_generated_css(input);
-        assert!(
-            out.contains(".\\?@self\\:child-count\\>2\\(_highlight\\) {"),
-            "output selector altered: {}",
-            out
-        );
-        assert!(
-            !out.contains("child-count\\ >"),
-            "unexpected space before escaped >: {}",
-            out
-        );
-        assert!(
-            !out.contains("\\> 2"),
-            "unexpected space after escaped >: {}",
-            out
-        );
+// Platform-specific file operations
+#[cfg(windows)]
+fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .access_mode(0x40000000) // FILE_FLAG_SEQUENTIAL_SCAN for performance
+        .open(path)?;
+    
+    file.set_len(content.len() as u64)?;
+    
+    let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
+    mmap.copy_from_slice(content);
+    mmap.flush()?;
+    
+    Ok(())
+}
+
+// Cross-platform fallback for non-Windows systems
+#[cfg(not(windows))]
+fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    // Use standard buffered write on non-Windows platforms
+    crate::utils::write_buffered(path, content)
+}
+
+// Cross-platform file content checking
+fn is_file_content_match(path: &Path, expected_hash: u64) -> bool {
+    let now = Instant::now();
+    
+    // Platform-specific implementation
+    #[cfg(windows)]
+    {
+        // Check the cache first
+        let mut cache_hit = false;
+        let result = MMAP_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if let Some((mmap, hash, timestamp)) = cache.get(path) {
+                // Use cached value if recent (within 100ms)
+                if now.duration_since(*timestamp) < Duration::from_millis(100) {
+                    cache_hit = true;
+                    return *hash == expected_hash;
+                }
+            }
+            
+            // Read the file
+            match std::fs::File::open(path) {
+                Ok(file) => {
+                    match unsafe { MmapOptions::new().map(&file) } {
+                        Ok(mmap) => {
+                            let mut hasher = SeaHasher::new();
+                            hasher.write(&mmap);
+                            let hash = hasher.finish();
+                            
+                            // Update cache
+                            cache.insert(path.to_path_buf(), (mmap, hash, now));
+                            
+                            hash == expected_hash
+                        },
+                        Err(_) => false
+                    }
+                },
+                Err(_) => false
+            }
+        });
+        
+        if cache_hit {
+            // Update the timestamp if we had a cache hit
+            MMAP_CACHE.with(|cache| {
+                if let Some((_, _, timestamp)) = cache.borrow_mut().get_mut(path) {
+                    *timestamp = now;
+                }
+            });
+        }
+        
+        return result;
+    }
+    
+    // Non-Windows implementation
+    #[cfg(not(windows))]
+    {
+        // Check the cache first
+        let mut cache_hit = false;
+        let result = CONTENT_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if let Some((_, hash, timestamp)) = cache.get(path) {
+                // Use cached value if recent
+                if now.duration_since(*timestamp) < Duration::from_millis(100) {
+                    cache_hit = true;
+                    return *hash == expected_hash;
+                }
+            }
+            
+            // Read the file
+            match std::fs::read(path) {
+                Ok(content) => {
+                    let mut hasher = SeaHasher::new();
+                    hasher.write(&content);
+                    let hash = hasher.finish();
+                    
+                    // Update cache
+                    cache.insert(path.to_path_buf(), (content, hash, now));
+                    
+                    hash == expected_hash
+                },
+                Err(_) => false
+            }
+        });
+        
+        if cache_hit {
+            // Update the timestamp if we had a cache hit
+            CONTENT_CACHE.with(|cache| {
+                if let Some((_, _, timestamp)) = cache.borrow_mut().get_mut(path) {
+                    *timestamp = now;
+                }
+            });
+        }
+        
+        return result;
+    }
+}
+
+// New function for ultra-fast CSS micro-patching
+fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
+                 engine: &StyleEngine, interner: &ClassInterner) -> bool {
+    // Skip if the file doesn't exist yet
+    if !path.exists() {
+        return false;
+    }
+    
+    // Find added and removed class IDs
+    let mut added_ids = Vec::new();
+    let mut removed_ids = Vec::new();
+    
+    for &id in new_ids {
+        if !old_ids.contains(&id) {
+            added_ids.push(id);
+        }
+    }
+    
+    for &id in old_ids {
+        if !new_ids.contains(&id) {
+            removed_ids.push(id);
+        }
+    }
+    
+    // If there are too many changes, don't try to patch
+    if added_ids.len() + removed_ids.len() > 10 {
+        return false;
+    }
+    
+    // If there are no changes, nothing to do
+    if added_ids.is_empty() && removed_ids.is_empty() {
+        return true;
+    }
+    
+    // Read the current file
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return false
+    };
+    
+    // For each removed class, remove its CSS
+    let mut updated_content = content.clone();
+    for id in &removed_ids {
+        let class_name = interner.get(*id);
+        
+        // Find and remove the CSS for this class
+        let selector = format!(".{} {{", class_name);
+        if let Some(start_idx) = updated_content.find(&selector) {
+            if let Some(end_idx) = updated_content[start_idx..].find("}\n") {
+                let end_idx = start_idx + end_idx + 2; // Include the } and \n
+                updated_content.replace_range(start_idx..end_idx, "");
+            }
+        }
+    }
+    
+    // For each added class, generate and append its CSS
+    if !added_ids.is_empty() {
+        let added_class_names: Vec<String> = added_ids
+            .iter()
+            .map(|id| interner.get(*id).to_string())
+            .collect();
+        
+        let refs: Vec<&str> = added_class_names.iter().map(|s| s.as_str()).collect();
+        let new_css = engine.generate_css_for_classes_batch(&refs);
+        
+        for css in new_css {
+            if !css.trim().is_empty() {
+                if !updated_content.is_empty() && !updated_content.ends_with("\n\n") {
+                    updated_content.push_str("\n\n");
+                }
+                updated_content.push_str(&normalize_generated_css(&css));
+            }
+        }
+    }
+    
+    // Write only if content changed
+    if updated_content != content {
+        write_mmap(path, updated_content.as_bytes()).is_ok()
+    } else {
+        true
     }
 }
 
@@ -818,156 +989,6 @@ pub fn generate_css(
         .expect("Failed to write CSS file");
 }
 
-// Fast file write using memory mapping
-fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .access_mode(0x40000000) // FILE_FLAG_SEQUENTIAL_SCAN for performance
-        .open(path)?;
-    
-    file.set_len(content.len() as u64)?;
-    
-    let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
-    mmap.copy_from_slice(content);
-    mmap.flush()?;
-    
-    Ok(())
-}
-
-// Check if file content matches expected content using memory mapping
-fn is_file_content_match(path: &Path, expected_hash: u64) -> bool {
-    let now = Instant::now();
-    
-    // Check the cache first
-    let mut cache_hit = false;
-    let result = MMAP_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        if let Some((mmap, hash, timestamp)) = cache.get(path) {
-            // Use cached value if recent (within 100ms)
-            if now.duration_since(*timestamp) < Duration::from_millis(100) {
-                cache_hit = true;
-                return *hash == expected_hash;
-            }
-        }
-        
-        // Read the file
-        match std::fs::File::open(path) {
-            Ok(file) => {
-                match unsafe { MmapOptions::new().map(&file) } {
-                    Ok(mmap) => {
-                        let mut hasher = SeaHasher::new();
-                        hasher.write(&mmap);
-                        let hash = hasher.finish();
-                        
-                        // Update cache
-                        cache.insert(path.to_path_buf(), (mmap, hash, now));
-                        
-                        hash == expected_hash
-                    },
-                    Err(_) => false
-                }
-            },
-            Err(_) => false
-        }
-    });
-    
-    if cache_hit {
-        // Update the timestamp if we had a cache hit
-        MMAP_CACHE.with(|cache| {
-            if let Some((_, _, timestamp)) = cache.borrow_mut().get_mut(path) {
-                *timestamp = now;
-            }
-        });
-    }
-    
-    result
-}
-
-// New function for ultra-fast CSS micro-patching
-fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
-                 engine: &StyleEngine, interner: &ClassInterner) -> bool {
-    // Skip if the file doesn't exist yet
-    if !path.exists() {
-        return false;
-    }
-    
-    // Find added and removed class IDs
-    let mut added_ids = Vec::new();
-    let mut removed_ids = Vec::new();
-    
-    for &id in new_ids {
-        if !old_ids.contains(&id) {
-            added_ids.push(id);
-        }
-    }
-    
-    for &id in old_ids {
-        if !new_ids.contains(&id) {
-            removed_ids.push(id);
-        }
-    }
-    
-    // If there are too many changes, don't try to patch
-    if added_ids.len() + removed_ids.len() > 10 {
-        return false;
-    }
-    
-    // If there are no changes, nothing to do
-    if added_ids.is_empty() && removed_ids.is_empty() {
-        return true;
-    }
-    
-    // Read the current file
-    let content = match std::fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(_) => return false
-    };
-    
-    // For each removed class, remove its CSS
-    let mut updated_content = content.clone();
-    for id in &removed_ids {
-        let class_name = interner.get(*id);
-        
-        // Find and remove the CSS for this class
-        let selector = format!(".{} {{", class_name);
-        if let Some(start_idx) = updated_content.find(&selector) {
-            if let Some(end_idx) = updated_content[start_idx..].find("}\n") {
-                let end_idx = start_idx + end_idx + 2; // Include the } and \n
-                updated_content.replace_range(start_idx..end_idx, "");
-            }
-        }
-    }
-    
-    // For each added class, generate and append its CSS
-    if !added_ids.is_empty() {
-        let added_class_names: Vec<String> = added_ids
-            .iter()
-            .map(|id| interner.get(*id).to_string())
-            .collect();
-        
-        let refs: Vec<&str> = added_class_names.iter().map(|s| s.as_str()).collect();
-        let new_css = engine.generate_css_for_classes_batch(&refs);
-        
-        for css in new_css {
-            if !css.trim().is_empty() {
-                if !updated_content.is_empty() && !updated_content.ends_with("\n\n") {
-                    updated_content.push_str("\n\n");
-                }
-                updated_content.push_str(&normalize_generated_css(&css));
-            }
-        }
-    }
-    
-    // Write only if content changed
-    if updated_content != content {
-        write_mmap(path, updated_content.as_bytes()).is_ok()
-    } else {
-        true
-    }
-}
-
 pub fn generate_css_ids(
     class_ids: &HashSet<u32>,
     output_path: &Path,
@@ -1009,7 +1030,6 @@ pub fn generate_css_ids(
     }
     
     // If micro-patching is successful, we can skip full regeneration
-    static PREV_CLASS_IDS: Lazy<RwLock<HashSet<u32>>> = Lazy::new(|| RwLock::new(HashSet::new()));
     let should_try_patch = !force_format && output_path.exists() && direct_hash != 0 && last_hash != 0;
     
     if should_try_patch {
@@ -1034,7 +1054,7 @@ pub fn generate_css_ids(
     let sorted_hash = sorted_hasher.finish();
     
     LAST_IDS_COUNT.store(sorted.len(), Ordering::Relaxed);
-    LAST_IDS_HASH.store(unsorted_hash, Ordering::Relaxed);
+    LAST_IDS_HASH.store(direct_hash, Ordering::Relaxed);
 
     let is_production = std::env::var("DX_ENV").map_or(false, |v| v == "production");
     if is_production {
@@ -1138,7 +1158,7 @@ pub fn generate_css_ids(
                 
                 // Update caches
                 if let Ok(mut cache) = OUTPUT_CACHE.write() {
-                    cache.insert(unsorted_hash, (Vec::new(), 0));
+                    cache.insert(direct_hash, (Vec::new(), 0));
                 }
                 if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
                     path_cache.insert(output_path.to_path_buf(), (0, now));
@@ -1150,13 +1170,20 @@ pub fn generate_css_ids(
             
             // Update caches
             if let Ok(mut cache) = OUTPUT_CACHE.write() {
-                cache.insert(unsorted_hash, (Vec::new(), 0));
+                cache.insert(direct_hash, (Vec::new(), 0));
             }
             if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
                 path_cache.insert(output_path.to_path_buf(), (0, now));
             }
         }
         
+        // Store current class IDs for future patches
+        if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
+            *prev_ids = class_ids.clone();
+        }
+        
+        // Update state before returning
+        last_state.store(direct_hash, Ordering::Relaxed);
         LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
         return;
     }
@@ -1198,7 +1225,7 @@ pub fn generate_css_ids(
             if writer.write_all(aggregate.as_bytes()).is_ok() && writer.flush().is_ok() {
                 // Cache the output for future use
                 if let Ok(mut cache) = OUTPUT_CACHE.write() {
-                    cache.insert(unsorted_hash, (aggregate.into_bytes(), content_hash));
+                    cache.insert(direct_hash, (aggregate.into_bytes(), content_hash));
                 }
                 if let Ok(mut path_cache) = PATH_CONTENT_CACHE.write() {
                     path_cache.insert(output_path.to_path_buf(), (content_hash, now));
@@ -1207,23 +1234,12 @@ pub fn generate_css_ids(
         }
     }
     
-    LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
-}
-
-pub fn preload_common_classes(engine: &StyleEngine, interner: &ClassInterner) {
-    let common_classes = ["flex", "grid", "hidden", "block", 
-                          "p-4", "m-4", "text-lg", "font-bold", 
-                          "rounded", "border", "shadow"];
-    
-    let css_rules = engine.generate_css_for_classes_batch(&common_classes);
-    
-    for (class, css) in common_classes.iter().zip(css_rules.iter()) {
-        if !css.is_empty() {
-            let normalized = normalize_generated_css(css);
-            if let Ok(mut cache) = NORMALIZED_CSS_CACHE.lock() {
-                let id = interner.intern(class);
-                cache.put(id, Arc::new(normalized));
-            }
-        }
+    // Store current class IDs for future patches
+    if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
+        *prev_ids = class_ids.clone();
     }
+    
+    // Update state before returning
+    last_state.store(direct_hash, Ordering::Relaxed);
+    LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
 }

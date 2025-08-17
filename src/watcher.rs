@@ -102,7 +102,7 @@ pub fn process_file_remove(
     }
 }
 
-// Process file change - optimized version
+// Enhanced file change detection
 pub fn process_file_change(
     cache: &ClassnameCache,
     path: &Path,
@@ -153,9 +153,18 @@ pub fn process_file_change(
     };
     let parse_duration = parse_start.elapsed();
 
+    // Check if the class set actually changed
+    let existing_ids = file_classnames_ids.get(path).cloned().unwrap_or_default();
+    let unchanged = ids.len() == existing_ids.len() && ids.iter().all(|id| existing_ids.contains(id));
+
+    // Early return if nothing changed
+    if unchanged {
+        return;
+    }
+
     // Convert back to strings for cache
     let update_start = Instant::now();
-    let (a_f, r_f, a_g, r_g, added_global, removed_global) = data_manager::update_class_maps_ids(
+    let (a_f, r_f, a_g, r_g, _added_global, _removed_global) = data_manager::update_class_maps_ids(
         path,
         &ids,
         file_classnames_ids,

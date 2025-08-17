@@ -287,30 +287,75 @@ fn main() {
             .green()
     );
 
+    // Initialize watcher module
+    watcher::init();
+
+    // Preload common classes to speed up initial processing
+    generator::preload_common_classes(&style_engine, &mut interner);
+
     // State for enhanced debouncing and change detection
     let pending_changes = Arc::new(AtomicBool::new(false));
-    let last_class_hash = Arc::new(AtomicU64::new(0));
     let pc_clone = pending_changes.clone();
+    let file_classnames_ids_arc = Arc::new(Mutex::new(file_classnames_ids));
+    let classname_counts_ids_arc = Arc::new(Mutex::new(classname_counts_ids));
+    let global_classnames_ids_arc = Arc::new(Mutex::new(global_classnames_ids));
+    let interner_arc = Arc::new(Mutex::new(interner));
+    let style_engine_arc = Arc::new(style_engine);
+    let output_file_arc = Arc::new(output_file);
+    let cache_arc = Arc::new(cache);
     
     // Add a background thread to process pending changes
+    // This ensures CSS regeneration happens even if the file watcher misses changes
+    let fcids_clone = file_classnames_ids_arc.clone();
+    let ccids_clone = classname_counts_ids_arc.clone();
+    let gcids_clone = global_classnames_ids_arc.clone();
+    let int_clone = interner_arc.clone();
+    let se_clone = style_engine_arc.clone();
+    let of_clone = output_file_arc.clone();
+    
     thread::spawn(move || {
+        let mut last_check = Instant::now();
+        let mut last_hash = 0u64;
+        
         loop {
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(Duration::from_millis(50));
+            
+            // Only check every 50ms to avoid excessive CPU usage
+            let now = Instant::now();
+            if now.duration_since(last_check) < Duration::from_millis(50) {
+                continue;
+            }
+            last_check = now;
+            
+            // If change signal is active, process it
             if pc_clone.load(Ordering::Relaxed) {
-                // Signal that we're processing changes
                 pc_clone.store(false, Ordering::Relaxed);
                 
-                // Give the file system a moment to settle
-                thread::sleep(Duration::from_millis(5));
-                
-                // Regenerate CSS with force option to ensure update
-                generator::generate_css_ids(
-                    &global_classnames_ids,
-                    &output_file,
-                    &style_engine,
-                    &interner,
-                    true,
-                );
+                // Acquire locks on shared data
+                if let (Ok(gcids), Ok(int)) = (
+                    gcids_clone.lock(),
+                    int_clone.lock(),
+                ) {
+                    // Check if the content has changed
+                    let mut hasher = SeaHasher::new();
+                    for &id in gcids.iter() {
+                        hasher.write_u32(id);
+                    }
+                    let current_hash = hasher.finish();
+                    
+                    if current_hash != last_hash {
+                        last_hash = current_hash;
+                        
+                        // Regenerate CSS with force option to ensure update
+                        generator::generate_css_ids(
+                            &gcids,
+                            &of_clone,
+                            &se_clone,
+                            &int,
+                            true,
+                        );
+                    }
+                }
             }
         }
     });
@@ -323,19 +368,17 @@ fn main() {
         .watch(&dir_canonical, RecursiveMode::Recursive)
         .expect("Failed to start watcher");
 
-    // Keep track of last processed file content hash to skip identical edits
+    // Enhanced change tracking
     let mut file_content_hashes: HashMap<PathBuf, u64> = HashMap::new();
-    // Class-specific hashes for better change detection
     let mut file_class_hashes: HashMap<PathBuf, u64> = HashMap::new();
-    // Last processed time to debounce rapid edits
     let mut last_processed_time: HashMap<PathBuf, Instant> = HashMap::new();
-    // Track files that need complete reparsing vs quick checking
     let mut files_needing_reparse: HashSet<PathBuf> = HashSet::new();
+    let mut changed_files_queue: Vec<(PathBuf, notify::event::EventKind)> = Vec::new();
 
     for res in rx {
         match res {
             Ok(events) => {
-                // Group events by path to avoid processing the same file multiple times
+                // Group events by path
                 let mut path_events: HashMap<PathBuf, notify::event::EventKind> = HashMap::new();
                 
                 for event in events {
@@ -345,20 +388,31 @@ fn main() {
                     
                     for raw_path in &event.paths {
                         let path = raw_path.canonicalize().unwrap_or_else(|_| raw_path.clone());
-                        if utils::is_code_file(&path) && path != output_file {
-                            // Keep the most significant event (Remove > Modify > Create)
-                            if let Some(existing_kind) = path_events.get(&path) {
-                                if matches!(existing_kind, notify::event::EventKind::Remove(_)) {
-                                    // Remove is already the most significant
-                                    continue;
-                                }
-                                if matches!(existing_kind, notify::event::EventKind::Modify(_)) 
-                                   && !matches!(event.kind, notify::event::EventKind::Remove(_)) {
-                                    // Keep Modify over anything but Remove
-                                    continue;
-                                }
+                        if !utils::is_code_file(&path) || path == *output_file_arc {
+                            continue;
+                        }
+                        
+                        // Keep the most significant event
+                        if let Some(existing_kind) = path_events.get(&path) {
+                            if matches!(existing_kind, notify::event::EventKind::Remove(_)) {
+                                continue;
                             }
-                            path_events.insert(path, event.kind);
+                            if matches!(existing_kind, notify::event::EventKind::Modify(_)) 
+                               && !matches!(event.kind, notify::event::EventKind::Remove(_)) {
+                                continue;
+                            }
+                        }
+                        path_events.insert(path, event.kind);
+                    }
+                }
+                
+                // If no events, check the queue
+                if path_events.is_empty() && !changed_files_queue.is_empty() {
+                    // Process a few queued files
+                    let to_process = std::cmp::min(changed_files_queue.len(), 5);
+                    for _ in 0..to_process {
+                        if let Some((path, kind)) = changed_files_queue.pop() {
+                            path_events.insert(path, kind);
                         }
                     }
                 }
@@ -368,7 +422,7 @@ fn main() {
                 
                 // Process events by path
                 for (path, kind) in path_events {
-                    // Debounce rapid changes to the same file - lower threshold
+                    // Debounce rapid changes - use a shorter threshold (1ms) to catch quick edits
                     let now = Instant::now();
                     let should_process = match last_processed_time.get(&path) {
                         Some(last_time) => now.duration_since(*last_time) > Duration::from_millis(1),
@@ -376,10 +430,12 @@ fn main() {
                     };
                     
                     if !should_process {
+                        // Queue for later processing
+                        changed_files_queue.push((path, kind));
                         continue;
                     }
                     
-                    // Skip processing if file content hasn't changed
+                    // For remove events, always process
                     if !matches!(kind, notify::event::EventKind::Remove(_)) {
                         // First check if the class content might have changed
                         let class_changed = if let Some(prev_hash) = file_class_hashes.get(&path) {
@@ -401,8 +457,20 @@ fn main() {
                             true
                         };
                         
-                        // If class detection suggests no changes, skip full content check
-                        if !class_changed {
+                        // Force reparse at least once every 5 checks to catch edge cases
+                        let force_reparse = path.metadata()
+                            .map(|m| m.modified().ok())
+                            .ok()
+                            .flatten()
+                            .map(|modified| {
+                                Instant::now().duration_since(
+                                    Instant::now() - Duration::from_secs(1)
+                                ).as_millis() < 100
+                            })
+                            .unwrap_or(false);
+                        
+                        // If class detection suggests no changes and we're not forcing, check content hash
+                        if !class_changed && !force_reparse && !files_needing_reparse.contains(&path) {
                             continue;
                         }
                         
@@ -413,7 +481,7 @@ fn main() {
                             let content_hash = hasher.finish();
                             
                             if let Some(&prev_hash) = file_content_hashes.get(&path) {
-                                if prev_hash == content_hash && !files_needing_reparse.contains(&path) {
+                                if prev_hash == content_hash && !files_needing_reparse.contains(&path) && !force_reparse {
                                     // Content unchanged, skip processing
                                     continue;
                                 }
@@ -432,39 +500,52 @@ fn main() {
                     // Update last processed time
                     last_processed_time.insert(path.clone(), now);
                     
-                    // Process the event
-                    if matches!(kind, notify::event::EventKind::Remove(_)) {
-                        watcher::process_file_remove(
-                            &cache,
-                            &path,
-                            &mut file_classnames_ids,
-                            &mut classname_counts_ids,
-                            &mut global_classnames_ids,
-                            &mut interner,
-                            &output_file,
-                            &style_engine,
-                        );
-                    } else {
-                        watcher::process_file_change(
-                            &cache,
-                            &path,
-                            &mut file_classnames_ids,
-                            &mut classname_counts_ids,
-                            &mut global_classnames_ids,
-                            &mut interner,
-                            &output_file,
-                            &style_engine,
-                        );
-                    }
-                    
-                    // Save the new class hash
-                    if !matches!(kind, notify::event::EventKind::Remove(_)) {
-                        if let Some((_, new_hash)) = quick_check_class_changes(&path, 0) {
-                            file_class_hashes.insert(path.clone(), new_hash);
+                    // Acquire locks for processing
+                    if let (
+                        Ok(mut file_classnames_ids),
+                        Ok(mut classname_counts_ids),
+                        Ok(mut global_classnames_ids),
+                        Ok(mut interner)
+                    ) = (
+                        file_classnames_ids_arc.lock(),
+                        classname_counts_ids_arc.lock(),
+                        global_classnames_ids_arc.lock(),
+                        interner_arc.lock()
+                    ) {
+                        // Process the event
+                        if matches!(kind, notify::event::EventKind::Remove(_)) {
+                            watcher::process_file_remove(
+                                &cache_arc,
+                                &path,
+                                &mut file_classnames_ids,
+                                &mut classname_counts_ids,
+                                &mut global_classnames_ids,
+                                &mut interner,
+                                &output_file_arc,
+                                &style_engine_arc,
+                            );
+                        } else {
+                            watcher::process_file_change(
+                                &cache_arc,
+                                &path,
+                                &mut file_classnames_ids,
+                                &mut classname_counts_ids,
+                                &mut global_classnames_ids,
+                                &mut interner,
+                                &output_file_arc,
+                                &style_engine_arc,
+                            );
                         }
+                        
+                        // Save the new class hash
+                        if !matches!(kind, notify::event::EventKind::Remove(_)) {
+                            if let Some((_, new_hash)) = quick_check_class_changes(&path, 0) {
+                                file_class_hashes.insert(path.clone(), new_hash);
+                            }
+                        }
+                        
+                        any_changes = true;
                     }
-                    
-                    any_changes = true;
                 }
                 
                 // If any changes were processed, signal the background thread
