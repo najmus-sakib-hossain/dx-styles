@@ -1,6 +1,10 @@
 # Dx
 Enhance Developer Experience
 
+```bash
+cargo add colored lightningcss lru notify notify-debouncer-full oxc_allocator oxc_ast oxc_parser oxc_span walkdir crossbeam-deque futures memmap2 rayon flatbuffers flatc-rust rkyv sled serde bincode libc sysinfo smallvec seahash once_cell regex cssparser serde_json toml
+```
+
 git config --global user.name "najmus-sakib-hossain"
 git config --global user.email "manfromexistence@proton.me"
 
