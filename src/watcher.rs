@@ -125,7 +125,7 @@ pub fn process_file_change(
                 if !prev_ids.is_empty() {
                     // We had classes before, but not anymore
                     let empty_ids = HashSet::new();
-                    let (a_f, r_f, a_g, r_g, _, _) = data_manager::update_class_maps_ids(
+                    let (_a_f, _r_f, a_g, r_g, _, _) = data_manager::update_class_maps_ids(
                         path,
                         &empty_ids,
                         file_classnames_ids,

@@ -309,6 +309,7 @@ fn main() {
     let int_clone = interner_arc.clone();
     let se_clone = style_engine_arc.clone();
     let of_clone = output_file_arc.clone();
+    let gcids_clone = global_classnames_ids_arc.clone(); // added
     
     thread::spawn(move || {
         let mut last_check = Instant::now();

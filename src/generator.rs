@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::cell::RefCell;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 // Use cfg to make platform-specific code conditional
 #[cfg(windows)]
@@ -1005,10 +1005,10 @@ pub fn generate_css_ids(
             if let Ok(mut cache) = NORMALIZED_CSS_CACHE.lock() {
                 for (i_ref, css) in chunk.iter().zip(new_normalized.iter()) {
                     if !css.trim().is_empty() {
-                        let id = sorted[**i_ref];
+                        let id = sorted[*i_ref];
                         let arc_css = Arc::new(css.clone());
                         cache.put(id, Arc::clone(&arc_css));
-                        normalized_blocks[**i_ref] = Some(arc_css);
+                        normalized_blocks[*i_ref] = Some(arc_css);
                     }
                 }
             }
