@@ -317,40 +317,29 @@ fn main() {
         
         loop {
             thread::sleep(Duration::from_millis(50));
-            
-            // Only check every 50ms to avoid excessive CPU usage
             let now = Instant::now();
             if now.duration_since(last_check) < Duration::from_millis(50) {
                 continue;
             }
             last_check = now;
             
-            // If change signal is active, process it
             if pc_clone.load(Ordering::Relaxed) {
                 pc_clone.store(false, Ordering::Relaxed);
-                
-                // Acquire locks on shared data
-                if let (Ok(gcids), Ok(int)) = (
-                    gcids_clone.lock(),
-                    int_clone.lock(),
-                ) {
-                    // Check if the content has changed
+                if let (Ok(gcids), Ok(int)) = (gcids_clone.lock(), int_clone.lock()) {
                     let mut hasher = SeaHasher::new();
                     for &id in gcids.iter() {
                         hasher.write_u32(id);
                     }
                     let current_hash = hasher.finish();
-                    
                     if current_hash != last_hash {
                         last_hash = current_hash;
-                        
-                        // Regenerate CSS with force option to ensure update
+                        // Was force=true; set to false to enable micro-patching & skip formatting
                         generator::generate_css_ids(
                             &gcids,
                             &of_clone,
                             &se_clone,
                             &int,
-                            true,
+                            false, // allow fast path & patch
                         );
                     }
                 }

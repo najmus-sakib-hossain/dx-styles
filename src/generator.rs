@@ -120,84 +120,155 @@ fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
 // Cross-platform file content checking
 fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
                  engine: &StyleEngine, interner: &ClassInterner) -> bool {
-    // Skip if the file doesn't exist yet
     if !path.exists() {
         return false;
     }
-    
-    // Find added and removed class IDs
+
+    // Compute deltas
     let mut added_ids = Vec::new();
     let mut removed_ids = Vec::new();
-    
     for &id in new_ids {
         if !old_ids.contains(&id) {
             added_ids.push(id);
         }
     }
-    
     for &id in old_ids {
         if !new_ids.contains(&id) {
             removed_ids.push(id);
         }
     }
-    
-    // If there are too many changes, don't try to patch
-    if added_ids.len() + removed_ids.len() > 10 {
-        return false;
-    }
-    
-    // If there are no changes, nothing to do
+
+    // Nothing to do
     if added_ids.is_empty() && removed_ids.is_empty() {
         return true;
     }
-    
-    // Read the current file
-    let content = match std::fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(_) => return false
+
+    // Allow more changes for micro patching (was 10)
+    if added_ids.len() + removed_ids.len() > 32 {
+        return false;
+    }
+
+    let Ok(mut content) = std::fs::read_to_string(path) else {
+        return false;
     };
-    
-    // For each removed class, remove its CSS
-    let mut updated_content = content.clone();
+    let original_len = content.len();
+    let mut changed = false;
+
+    // Helper: remove a class rule block robustly (handles multi-line + nested braces)
+    fn remove_rule_block(src: &mut String, class_name: &str) -> bool {
+        let needle = format!(".{}", class_name);
+        let bytes = src.as_bytes();
+        let mut pos = 0usize;
+        let mut did_remove = false;
+        while let Some(rel) = src[pos..].find(&needle) {
+            let start = pos + rel;
+            // Ensure it's a selector start (preceded by start/whitespace or double newline)
+            if start > 0 {
+                let prev = bytes[start - 1] as char;
+                if !(prev.is_whitespace() || prev == '\n' || prev == '}' ) {
+                    pos = start + needle.len();
+                    continue;
+                }
+            }
+            // Find first '{' after the selector (skip until '{')
+            let mut brace_search = start + needle.len();
+            let sb = src.as_bytes();
+            let mut found_brace = None;
+            while brace_search < sb.len() {
+                let c = sb[brace_search] as char;
+                if c == '{' {
+                    found_brace = Some(brace_search);
+                    break;
+                }
+                if c == '\n' && brace_search > start && sb[brace_search - 1] == b'\n' {
+                    break; // blank line before '{' -> likely not a rule
+                }
+                brace_search += 1;
+            }
+            let Some(open_pos) = found_brace else {
+                pos = start + needle.len();
+                continue;
+            };
+
+            // Walk to matching closing brace depth
+            let mut depth = 0i32;
+            let mut i = open_pos;
+            let mut end_pos = None;
+            while i < sb.len() {
+                let c = sb[i] as char;
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        end_pos = Some(i + 1);
+                        break;
+                    }
+                }
+                i += 1;
+            }
+            let Some(mut rule_end) = end_pos else {
+                pos = start + needle.len();
+                continue;
+            };
+
+            // Extend over trailing whitespace / blank lines
+            while rule_end < sb.len() && (sb[rule_end] as char).is_whitespace() {
+                rule_end += 1;
+            }
+            // Trim excessive blank lines collapse to at most one
+            let slice = &src[start..rule_end];
+            if !slice.is_empty() {
+                src.replace_range(start..rule_end, "");
+                did_remove = true;
+                // Restart scanning from beginning as indices shifted
+                pos = 0;
+                continue;
+            }
+            pos = start + needle.len();
+        }
+        did_remove
+    }
+
+    // Remove old class rules
     for id in &removed_ids {
         let class_name = interner.get(*id);
-        
-        // Find and remove the CSS for this class
-        let selector = format!(".{} {{", class_name);
-        if let Some(start_idx) = updated_content.find(&selector) {
-            if let Some(end_idx) = updated_content[start_idx..].find("}\n") {
-                let end_idx = start_idx + end_idx + 2; // Include the } and \n
-                updated_content.replace_range(start_idx..end_idx, "");
-            }
+        if remove_rule_block(&mut content, class_name) {
+            changed = true;
         }
     }
-    
-    // For each added class, generate and append its CSS
+
+    // Append new class rules
     if !added_ids.is_empty() {
-        let added_class_names: Vec<String> = added_ids
-            .iter()
-            .map(|id| interner.get(*id).to_string())
-            .collect();
-        
+        let added_class_names: Vec<String> = added_ids.iter().map(|id| interner.get(*id).to_string()).collect();
         let refs: Vec<&str> = added_class_names.iter().map(|s| s.as_str()).collect();
         let new_css = engine.generate_css_for_classes_batch(&refs);
-        
         for css in new_css {
-            if !css.trim().is_empty() {
-                if !updated_content.is_empty() && !updated_content.ends_with("\n\n") {
-                    updated_content.push_str("\n\n");
-                }
-                updated_content.push_str(&normalize_generated_css(&css));
+            let norm = normalize_generated_css(&css);
+            if norm.trim().is_empty() {
+                continue;
             }
+            if !content.is_empty() && !content.ends_with("\n\n") {
+                content.push_str("\n\n");
+            }
+            content.push_str(&norm);
+            changed = true;
         }
     }
-    
-    // Write only if content changed
-    if updated_content != content {
-        write_mmap(path, updated_content.as_bytes()).is_ok()
-    } else {
-        true
+
+    // If we expected changes but nothing actually mutated the content, abort patch => force full regen
+    if !changed && (added_ids.len() + removed_ids.len() > 0) {
+        return false;
     }
+
+    if changed && content.len() != original_len {
+        if write_mmap(path, content.as_bytes()).is_ok() {
+            return true;
+        }
+        return false;
+    }
+
+    true
 }
 
 fn normalize_generated_css(css: &str) -> String {
@@ -915,7 +986,6 @@ pub fn generate_css_ids(
     if should_try_patch {
         let old_ids = PREV_CLASS_IDS.read().unwrap().clone();
         if patch_css_file(output_path, &old_ids, class_ids, engine, interner) {
-            // Patching successful, update state and return
             LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
             last_state.store(direct_hash, Ordering::Relaxed);
             if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
@@ -924,7 +994,7 @@ pub fn generate_css_ids(
             return;
         }
     }
-    
+
     // Rest of the original code for full regeneration
     let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
     sorted.sort_unstable();
