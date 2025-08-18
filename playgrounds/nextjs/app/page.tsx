@@ -3,7 +3,7 @@ export default function Home() {
     <main
       className="
         bg-blue-500 min-h-screen w-screen p-12 text-white-800
-        lg(p-74)
+        lg(p-42)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)
         animate:2s from(opacity-0) to(opacity-100) forwards
