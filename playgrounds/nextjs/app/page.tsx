@@ -2,15 +2,15 @@ export default function Home() {
   return (
     <main
       className="
-        m-15 flex flex-col items-center justify-center
+        m-69 flex flex-col items-center justify-center
         bg-blue-500 min-h-screen w-screen p-12 text-white-800
-        lg(p-45)
+        lg(p-96)
         mesh([slate-100, sky-200], [slate-300, blue-300])
         dark(mesh([slate-800, blue-900], [slate-900, purple-900]) text-gray-200)
         animate:2s from(opacity-0) to(opacity-100) forwards
       "
     >
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
 
         <div className="card(p-13 bg-black/50 backdrop-blur-lg rounded-xl shadow-lg) dark(bg-black/50) div(h1(font-bold) p(mt-2))">
 

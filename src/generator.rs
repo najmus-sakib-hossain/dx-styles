@@ -17,6 +17,7 @@ use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::cell::RefCell;
 use std::time::Instant;
+use cssparser::serialize_identifier; // added
 
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
@@ -104,142 +105,132 @@ fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
     crate::utils::write_buffered(path, content)
 }
 
+// helper: cssparser-based classname escape
+#[inline]
+fn escape_class_ident(ident: &str) -> String {
+    let mut out = String::new();
+    // cssparser guarantees proper CSS identifier escaping
+    serialize_identifier(ident, &mut out).expect("serialize identifier");
+    out
+}
+
 fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
                  engine: &StyleEngine, interner: &ClassInterner) -> bool {
-    if !path.exists() {
-        return false;
-    }
+    if !path.exists() { return false; }
 
     let mut added_ids = Vec::new();
     let mut removed_ids = Vec::new();
-    for &id in new_ids {
-        if !old_ids.contains(&id) {
-            added_ids.push(id);
-        }
-    }
-    for &id in old_ids {
-        if !new_ids.contains(&id) {
-            removed_ids.push(id);
-        }
-    }
+    for &id in new_ids { if !old_ids.contains(&id) { added_ids.push(id); } }
+    for &id in old_ids { if !new_ids.contains(&id) { removed_ids.push(id); } }
 
-    if added_ids.is_empty() && removed_ids.is_empty() {
-        return true;
-    }
+    if added_ids.is_empty() && removed_ids.is_empty() { return true; }
+    if added_ids.len() + removed_ids.len() > 32 { return false; }
 
-    if added_ids.len() + removed_ids.len() > 32 {
-        return false;
-    }
-
-    let Ok(mut content) = std::fs::read_to_string(path) else {
-        return false;
-    };
-    let original_len = content.len();
+    let Ok(mut content) = std::fs::read_to_string(path) else { return false; };
+    let original = content.clone();
     let mut changed = false;
 
-    fn remove_rule_block(src: &mut String, class_name: &str) -> bool {
-        let needle = format!(".{}", class_name);
-        let mut pos = 0usize;
-        let mut did_remove = false;
-        while let Some(rel) = src[pos..].find(&needle) {
-            let start = pos + rel;
-            if start > 0 {
-                let prev = src.as_bytes()[start - 1] as char;
-                if !(prev.is_whitespace() || prev == '\n' || prev == '}' ) {
-                    pos = start + needle.len();
+    for id in &removed_ids {
+        let class_name = interner.get(*id);
+        let escaped = escape_class_ident(class_name);
+        let needle = format!(".{}", escaped);
+        let mut found_any = false;
+        let mut search_pos: usize = 0;
+
+        while let Some(rel) = content[search_pos..].find(&needle) {
+            let abs = search_pos + rel;
+
+            // Boundary check (avoid mid-identifier matches)
+            if abs > 0 {
+                let prev = content.as_bytes()[abs - 1] as char;
+                if prev.is_ascii_alphanumeric() || prev == '_' || prev == '-' || prev == '\\' {
+                    search_pos = abs + needle.len();
                     continue;
                 }
             }
-            let mut brace_search = start + needle.len();
-            let sb = src.as_bytes();
-            let mut found_brace = None;
-            while brace_search < sb.len() {
-                let c = sb[brace_search] as char;
-                if c == '{' {
-                    found_brace = Some(brace_search);
-                    break;
-                }
-                if c == '\n' && brace_search > start && sb[brace_search - 1] == b'\n' {
-                    break;
-                }
-                brace_search += 1;
-            }
-            let Some(open_pos) = found_brace else {
-                pos = start + needle.len();
-                continue;
+
+            // Selector line start
+            let sel_start = content[..abs].rfind('\n').map(|i| i + 1).unwrap_or(0);
+
+            // Find '{'
+            let brace_pos = match content[abs..].find('{') {
+                Some(b) => abs + b,
+                None => { search_pos = abs + needle.len(); continue; }
             };
 
-            let mut depth = 0i32;
-            let mut i = open_pos;
-            let mut end_pos = None;
-            while i < sb.len() {
-                let c = sb[i] as char;
-                if c == '{' {
-                    depth += 1;
-                } else if c == '}' {
+            // Abort if selector spans multiple lines (ambiguous)
+            if content[abs..brace_pos].contains('\n') {
+                return false;
+            }
+
+            let selector_segment = content[sel_start..brace_pos].trim();
+            if selector_segment.contains(',') {
+                return false; // multi-selector ambiguity
+            }
+            if !selector_segment.starts_with(&needle) {
+                search_pos = abs + needle.len();
+                continue;
+            }
+
+            // Find matching block end
+            let mut depth: i32 = 0;
+            let mut i = brace_pos;
+            let mut end = None;
+            let bytes = content.as_bytes();
+            while i < bytes.len() {
+                let ch = bytes[i] as char;
+                if ch == '{' { depth += 1; }
+                else if ch == '}' {
                     depth -= 1;
                     if depth == 0 {
-                        end_pos = Some(i + 1);
+                        end = Some(i + 1);
                         break;
                     }
                 }
                 i += 1;
             }
-            let Some(mut rule_end) = end_pos else {
-                pos = start + needle.len();
-                continue;
-            };
+            let Some(block_end) = end else { return false; };
 
-            while rule_end < sb.len() && (sb[rule_end] as char).is_whitespace() {
-                rule_end += 1;
+            // Extend trailing whitespace
+            let mut trailing = block_end;
+            while trailing < bytes.len() && (bytes[trailing] as char).is_whitespace() {
+                trailing += 1;
             }
-            let slice = &src[start..rule_end];
-            if !slice.is_empty() {
-                src.replace_range(start..rule_end, "");
-                did_remove = true;
-                pos = 0;
-                continue;
-            }
-            pos = start + needle.len();
-        }
-        did_remove
-    }
 
-    for id in &removed_ids {
-        let class_name = interner.get(*id);
-        if remove_rule_block(&mut content, class_name) {
+            // Perform removal (no immutable borrow alive now)
+            content.replace_range(sel_start..trailing, "");
+            found_any = true;
             changed = true;
+            search_pos = 0; // restart after mutation
+        }
+
+        if !found_any {
+            return false; // force full regen to avoid stale rule
         }
     }
 
+    // Additions
     if !added_ids.is_empty() {
-        let added_class_names: Vec<String> = added_ids.iter().map(|id| interner.get(*id).to_string()).collect();
-        let refs: Vec<&str> = added_class_names.iter().map(|s| s.as_str()).collect();
+        let added: Vec<String> = added_ids.iter().map(|id| interner.get(*id).to_string()).collect();
+        let refs: Vec<&str> = added.iter().map(|s| s.as_str()).collect();
         let new_css = engine.generate_css_for_classes_batch(&refs);
         for css in new_css {
             let norm = normalize_generated_css(&css);
-            if norm.trim().is_empty() {
-                continue;
-            }
-            if !content.is_empty() && !content.ends_with("\n\n") {
-                content.push_str("\n\n");
-            }
+            if norm.trim().is_empty() { continue; }
+            if !content.is_empty() && !content.ends_with("\n\n") { content.push_str("\n\n"); }
             content.push_str(&norm);
             changed = true;
         }
     }
 
-    if !changed && (added_ids.len() + removed_ids.len() > 0) {
-        return false;
-    }
+    if !changed { return false; }
 
-    if changed && content.len() != original_len {
+    if content != original {
         if write_mmap(path, content.as_bytes()).is_ok() {
             return true;
         }
         return false;
     }
-
     true
 }
 
@@ -312,7 +303,6 @@ fn normalize_generated_css(css: &str) -> String {
     });
 
     out = remove_orphan_selectors(&out);
-    out = reescape_leading_invalid_identifiers(&out);
     out = normalize_child_combinator_spacing(&out);
     out = remove_empty_rules(&out);
     if out.contains("animation:") {
@@ -648,60 +638,6 @@ fn fix_missing_dot_for_escaped_symbol_groups(input: &str) -> String {
     }
     if !changed {
         return input.to_string();
-    }
-    out
-}
-
-fn reescape_leading_invalid_identifiers(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let bytes = input.as_bytes();
-    let mut i = 0usize;
-    let mut last_copy = 0usize;
-    while i < bytes.len() {
-        if bytes[i] == b'.' {
-            let start = i + 1;
-            if start >= bytes.len() {
-                break;
-            }
-            if bytes[start].is_ascii_digit() {
-                i += 1;
-                continue;
-            }
-            if bytes[start] == b'\\' {
-                i += 1;
-                continue;
-            }
-            let ch = bytes[start] as char;
-            let needs_escape = match ch {
-                'a'..='z' | 'A'..='Z' | '_' => false,
-                '-' => {
-                    if start + 1 < bytes.len() {
-                        let next = bytes[start + 1] as char;
-                        next.is_ascii_digit()
-                    } else {
-                        false
-                    }
-                }
-                _ => true,
-            } || ch.is_ascii_digit();
-            if needs_escape {
-                if i > last_copy {
-                    out.push_str(&input[last_copy..i + 1]);
-                }
-                out.push('\\');
-                out.push(ch);
-                last_copy = start + 1;
-                i = start + 1;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    if last_copy == 0 {
-        return input.to_string();
-    }
-    if last_copy < input.len() {
-        out.push_str(&input[last_copy..]);
     }
     out
 }
