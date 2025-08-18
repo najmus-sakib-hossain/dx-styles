@@ -45,7 +45,7 @@ static PATH_CONTENT_CACHE: Lazy<RwLock<HashMap<PathBuf, (u64, u64)>>> =
 static LAST_GENERATION_TIME: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 // New cache for tracking specific class changes
-static CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> = 
+static _CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 // IDs tracking for optimization

@@ -28,10 +28,10 @@ fn detect_changes(path: &Path, interner: &mut ClassInterner) -> Option<HashSet<u
     let ids = parser::parse_classnames_ids(path, interner);
 
     // For debugging/tuning
-    let elapsed = start.elapsed();
-    if elapsed > Duration::from_millis(1) {
-        println!("⚠️ Slow parse ({:?}): {}", elapsed, path.display());
-    }
+    let _elapsed = start.elapsed();
+    // if elapsed > Duration::from_millis(1) {
+    //     println!("⚠️ Slow parse ({:?}): {}", elapsed, path.display());
+    // }
 
     if ids.is_empty() {
         None
@@ -221,29 +221,29 @@ pub fn process_file_change(
 }
 
 // Optimized function to check if a file needs processing
-pub fn needs_processing(
-    _path: &Path,
-    content_hash: u64,
-    class_hash: u64,
-    last_content_hash: Option<u64>,
-    last_class_hash: Option<u64>,
-) -> bool {
-    // If we don't have previous hashes, always process
-    if last_content_hash.is_none() || last_class_hash.is_none() {
-        return true;
-    }
+// pub fn needs_processing(
+//     _path: &Path,
+//     content_hash: u64,
+//     class_hash: u64,
+//     last_content_hash: Option<u64>,
+//     last_class_hash: Option<u64>,
+// ) -> bool {
+//     // If we don't have previous hashes, always process
+//     if last_content_hash.is_none() || last_class_hash.is_none() {
+//         return true;
+//     }
 
-    // If content hash matches but class hash doesn't, we need to process
-    // This catches cases where the content might be similar but class usage changed
-    if last_content_hash == Some(content_hash) && last_class_hash != Some(class_hash) {
-        return true;
-    }
+//     // If content hash matches but class hash doesn't, we need to process
+//     // This catches cases where the content might be similar but class usage changed
+//     if last_content_hash == Some(content_hash) && last_class_hash != Some(class_hash) {
+//         return true;
+//     }
 
-    // If content hash changed, we need to process
-    if last_content_hash != Some(content_hash) {
-        return true;
-    }
+//     // If content hash changed, we need to process
+//     if last_content_hash != Some(content_hash) {
+//         return true;
+//     }
 
-    // No significant changes
-    false
-}
+//     // No significant changes
+//     false
+// }
