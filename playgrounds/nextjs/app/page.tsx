@@ -2,6 +2,7 @@ export default function Home() {
   return (
     <main
       className="
+        m-15 flex flex-col items-center justify-center
         bg-blue-500 min-h-screen w-screen p-12 text-white-800
         lg(p-45)
         mesh([slate-100, sky-200], [slate-300, blue-300])

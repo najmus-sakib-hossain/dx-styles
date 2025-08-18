@@ -18,7 +18,6 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::cell::RefCell;
 use std::time::Instant;
 
-// Use cfg to make platform-specific code conditional
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
@@ -33,26 +32,20 @@ static NORMALIZED_CSS_CACHE: Lazy<Mutex<LruCache<u32, Arc<String>>>> =
 static EMITTED_KEYS: Lazy<RwLock<std::collections::HashSet<String>>> =
     Lazy::new(|| RwLock::new(std::collections::HashSet::new()));
 
-// Ultra-fast output cache to avoid regenerating identical CSS
 static OUTPUT_CACHE: Lazy<RwLock<HashMap<u64, (Vec<u8>, u64)>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-// Cache for CSS content by path
 static PATH_CONTENT_CACHE: Lazy<RwLock<HashMap<PathBuf, (u64, u64)>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-// Last successful CSS generation timestamp
 static LAST_GENERATION_TIME: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
-// New cache for tracking specific class changes
 static _CLASS_CHANGE_TRACKER: Lazy<RwLock<HashMap<u32, u64>>> = 
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-// IDs tracking for optimization
 static LAST_IDS_HASH: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 static LAST_IDS_COUNT: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(usize::MAX));
 
-// Memory-mapped file cache to avoid disk I/O (platform independent version)
 thread_local! {
     #[cfg(windows)]
     static MMAP_CACHE: RefCell<HashMap<PathBuf, (Mmap, u64, Instant)>> = RefCell::new(HashMap::new());
@@ -61,10 +54,8 @@ thread_local! {
     static CONTENT_CACHE: RefCell<HashMap<PathBuf, (Vec<u8>, u64, Instant)>> = RefCell::new(HashMap::new());
 }
 
-// Store previous class IDs for efficient patching
 static PREV_CLASS_IDS: Lazy<RwLock<HashSet<u32>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
-// Ultra-fast hash function specific for class detection
 #[inline]
 fn fast_hash<T: Hash>(v: &T) -> u64 {
     let mut h = SeaHasher::new();
@@ -72,7 +63,6 @@ fn fast_hash<T: Hash>(v: &T) -> u64 {
     h.finish()
 }
 
-// Preload common classes for fast access
 pub fn preload_common_classes(engine: &StyleEngine, interner: &mut ClassInterner) {
     let common_classes = ["flex", "grid", "hidden", "block", 
                           "p-4", "m-4", "text-lg", "font-bold", 
@@ -91,14 +81,13 @@ pub fn preload_common_classes(engine: &StyleEngine, interner: &mut ClassInterner
     }
 }
 
-// Platform-specific file operations
 #[cfg(windows)]
 fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .access_mode(0x40000000) // FILE_FLAG_SEQUENTIAL_SCAN for performance
+        .access_mode(0x40000000)
         .open(path)?;
     
     file.set_len(content.len() as u64)?;
@@ -110,21 +99,17 @@ fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-// Cross-platform fallback for non-Windows systems
 #[cfg(not(windows))]
 fn write_mmap(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    // Use standard buffered write on non-Windows platforms
     crate::utils::write_buffered(path, content)
 }
 
-// Cross-platform file content checking
 fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>, 
                  engine: &StyleEngine, interner: &ClassInterner) -> bool {
     if !path.exists() {
         return false;
     }
 
-    // Compute deltas
     let mut added_ids = Vec::new();
     let mut removed_ids = Vec::new();
     for &id in new_ids {
@@ -138,12 +123,10 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
         }
     }
 
-    // Nothing to do
     if added_ids.is_empty() && removed_ids.is_empty() {
         return true;
     }
 
-    // Allow more changes for micro patching (was 10)
     if added_ids.len() + removed_ids.len() > 32 {
         return false;
     }
@@ -154,23 +137,19 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
     let original_len = content.len();
     let mut changed = false;
 
-    // Helper: remove a class rule block robustly (handles multi-line + nested braces)
     fn remove_rule_block(src: &mut String, class_name: &str) -> bool {
         let needle = format!(".{}", class_name);
-        let bytes = src.as_bytes();
         let mut pos = 0usize;
         let mut did_remove = false;
         while let Some(rel) = src[pos..].find(&needle) {
             let start = pos + rel;
-            // Ensure it's a selector start (preceded by start/whitespace or double newline)
             if start > 0 {
-                let prev = bytes[start - 1] as char;
+                let prev = src.as_bytes()[start - 1] as char;
                 if !(prev.is_whitespace() || prev == '\n' || prev == '}' ) {
                     pos = start + needle.len();
                     continue;
                 }
             }
-            // Find first '{' after the selector (skip until '{')
             let mut brace_search = start + needle.len();
             let sb = src.as_bytes();
             let mut found_brace = None;
@@ -181,7 +160,7 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
                     break;
                 }
                 if c == '\n' && brace_search > start && sb[brace_search - 1] == b'\n' {
-                    break; // blank line before '{' -> likely not a rule
+                    break;
                 }
                 brace_search += 1;
             }
@@ -190,7 +169,6 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
                 continue;
             };
 
-            // Walk to matching closing brace depth
             let mut depth = 0i32;
             let mut i = open_pos;
             let mut end_pos = None;
@@ -212,16 +190,13 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
                 continue;
             };
 
-            // Extend over trailing whitespace / blank lines
             while rule_end < sb.len() && (sb[rule_end] as char).is_whitespace() {
                 rule_end += 1;
             }
-            // Trim excessive blank lines collapse to at most one
             let slice = &src[start..rule_end];
             if !slice.is_empty() {
                 src.replace_range(start..rule_end, "");
                 did_remove = true;
-                // Restart scanning from beginning as indices shifted
                 pos = 0;
                 continue;
             }
@@ -230,7 +205,6 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
         did_remove
     }
 
-    // Remove old class rules
     for id in &removed_ids {
         let class_name = interner.get(*id);
         if remove_rule_block(&mut content, class_name) {
@@ -238,7 +212,6 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
         }
     }
 
-    // Append new class rules
     if !added_ids.is_empty() {
         let added_class_names: Vec<String> = added_ids.iter().map(|id| interner.get(*id).to_string()).collect();
         let refs: Vec<&str> = added_class_names.iter().map(|s| s.as_str()).collect();
@@ -256,7 +229,6 @@ fn patch_css_file(path: &Path, old_ids: &HashSet<u32>, new_ids: &HashSet<u32>,
         }
     }
 
-    // If we expected changes but nothing actually mutated the content, abort patch => force full regen
     if !changed && (added_ids.len() + removed_ids.len() > 0) {
         return false;
     }
@@ -947,24 +919,20 @@ pub fn generate_css_ids(
     interner: &ClassInterner,
     force_format: bool,
 ) {
-    // Ultra-fast unchanged check using atomic state
     static LAST_STATE: OnceCell<AtomicU64> = OnceCell::new();
     let last_state = LAST_STATE.get_or_init(|| AtomicU64::new(0));
     
-    // Skip all work if output was recently generated (debounce)
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
     
     let last_gen = LAST_GENERATION_TIME.load(Ordering::Relaxed);
-    if !force_format && now - last_gen < 2 {  // Reduced from 5ms to 2ms
-        return; // Skip if last generation was less than 2ms ago
+    if !force_format && now - last_gen < 2 {
+        return;
     }
     
-    // Compute a direct hash of class IDs for ultra-fast comparison
     let mut direct_hasher = SeaHasher::new();
-    // Sort to ensure consistent hashing
     let mut sorted_for_hash: Vec<u32> = class_ids.iter().copied().collect();
     sorted_for_hash.sort_unstable();
     for id in &sorted_for_hash {
@@ -972,15 +940,12 @@ pub fn generate_css_ids(
     }
     let direct_hash = direct_hasher.finish();
     
-    // Compare with last known state
     let last_hash = last_state.load(Ordering::Relaxed);
     if !force_format && last_hash == direct_hash && last_hash != 0 {
-        // No changes, skip all work
         LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
         return;
     }
     
-    // If micro-patching is successful, we can skip full regeneration
     let should_try_patch = !force_format && output_path.exists() && direct_hash != 0 && last_hash != 0;
     
     if should_try_patch {
@@ -995,7 +960,6 @@ pub fn generate_css_ids(
         }
     }
 
-    // Rest of the original code for full regeneration
     let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
     sorted.sort_unstable();
     
@@ -1041,7 +1005,6 @@ pub fn generate_css_ids(
         return;
     }
 
-    // Dev path
     let mut normalized_blocks: Vec<Option<Arc<String>>> = vec![None; sorted.len()];
     let mut missing_indices = Vec::new();
     {
@@ -1056,7 +1019,6 @@ pub fn generate_css_ids(
     }
 
     if !missing_indices.is_empty() {
-        // Process missing classes in batches for better performance
         const BATCH_SIZE: usize = 64;
         for chunk in missing_indices.chunks(BATCH_SIZE) {
             let missing_ids: Vec<u32> = chunk.iter().map(|&i| sorted[i]).collect();
@@ -1085,7 +1047,6 @@ pub fn generate_css_ids(
         }
     }
 
-    // Calculate capacity and check if we actually have content
     let mut capacity = 0;
     let mut has_content = false;
     for block_opt in &normalized_blocks {
@@ -1096,13 +1057,10 @@ pub fn generate_css_ids(
     }
 
     if !has_content {
-        // Empty output - fast path
         if let Ok(existing) = std::fs::metadata(output_path) {
             if existing.len() > 0 {
-                // Only write if not already empty
                 crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
                 
-                // Update caches
                 if let Ok(mut cache) = OUTPUT_CACHE.write() {
                     cache.insert(direct_hash, (Vec::new(), 0));
                 }
@@ -1111,10 +1069,8 @@ pub fn generate_css_ids(
                 }
             }
         } else {
-            // File doesn't exist, create empty file
             crate::utils::write_buffered(output_path, b"").expect("Failed to write empty CSS file");
             
-            // Update caches
             if let Ok(mut cache) = OUTPUT_CACHE.write() {
                 cache.insert(direct_hash, (Vec::new(), 0));
             }
@@ -1123,18 +1079,15 @@ pub fn generate_css_ids(
             }
         }
         
-        // Store current class IDs for future patches
         if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
             *prev_ids = class_ids.clone();
         }
         
-        // Update state before returning
         last_state.store(direct_hash, Ordering::Relaxed);
         LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
         return;
     }
 
-    // Build final output string
     let mut aggregate = String::with_capacity(capacity);
     let mut first = true;
     for block_opt in normalized_blocks {
@@ -1150,7 +1103,6 @@ pub fn generate_css_ids(
     let aggregate = condense_blank_lines(&aggregate);
     let content_hash = fast_hash(&aggregate);
     
-    // Check if file already has this content
     let need_write = if let Ok(path_cache) = PATH_CONTENT_CACHE.read() {
         match path_cache.get(output_path) {
             Some((hash, _)) => *hash != content_hash,
@@ -1169,7 +1121,6 @@ pub fn generate_css_ids(
         {
             let mut writer = BufWriter::with_capacity(aggregate.len() + 256, file);
             if writer.write_all(aggregate.as_bytes()).is_ok() && writer.flush().is_ok() {
-                // Cache the output for future use
                 if let Ok(mut cache) = OUTPUT_CACHE.write() {
                     cache.insert(direct_hash, (aggregate.into_bytes(), content_hash));
                 }
@@ -1180,12 +1131,10 @@ pub fn generate_css_ids(
         }
     }
     
-    // Store current class IDs for future patches
     if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
         *prev_ids = class_ids.clone();
     }
     
-    // Update state before returning
     last_state.store(direct_hash, Ordering::Relaxed);
     LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
 }
