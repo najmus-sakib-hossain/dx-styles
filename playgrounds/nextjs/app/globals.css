@@ -7,38 +7,39 @@
   animation: 2s forwards dx-animation-bc326ef84011c522;
 }
 
-.p-4 {
-  padding: 1rem;
+.div\(h1\(font-bold\)\ p\(mt-2\)\) > h1 {
+  font-weight: 700;
+}
+
+.div\(h1\(font-bold\)\ p\(mt-2\)\) > p {
+  margin-top: 0.5rem;
 }
 
 .font-semibold {
   font-weight: 600;
 }
 
-.overflow-auto {
-  overflow: auto;
+.p-4 {
+  padding: 1rem;
 }
 
-.mesh\(\[slate-100\,\ sky-200\]\,\ \[slate-300\,\ blue-300\]\) {
-  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
-  background-size: cover;
-  background-blend-mode: screen, lighten;
+.max-w-full {
+  max-width: 100%;
 }
 
-.max-w-5xl {
-  max-width: 64rem;
+.\~text\(2rem\@md\,\ 3rem\@xl\) {
+  font-size: clamp(2rem, calc(2rem + 1 * (100vw - 768px) / (1280 - 768)), 3rem);
 }
 
-.container-type-inline-size {
-  container-type: inline-size;
+@media (min-width: 1024px) {
+  .lg\(p-45\) {
+    padding: 11.25rem;
+  }
 }
 
-.w-full {
-  width: 100%;
-}
-
-.border-dashed {
-  border-style: dashed;
+.\?\@self\:child-count\>2\(_highlight\):has( > :nth-last-child(n+2):first-child) {
+  background-color: oklch(0.945 0.129 101.54);
+  color: oklch(0.421 0.095 57.708);
 }
 
 .\?\@container\>640px\(text-xl\) {
@@ -52,31 +53,8 @@
   }
 }
 
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.text-2xl {
-  font-size: 1.5rem;
-}
-
-.\~text\(2rem\@md\,\ 3rem\@xl\) {
-  font-size: clamp(2rem, calc(2rem + 1 * (100vw - 768px) / (1280 - 768)), 3rem);
-}
-
-.div\(div\(mt-4\)\) > div {
-  margin-top: 1rem;
-}
-
-.max-w-full {
-  max-width: 100%;
-}
-
-@container (min-width: 640px) {
-  .\?\@container\>640px\(bg-green-200\ text-green-900\) {
-    background-color: oklch(0.925 0.084 155.995);
-    color: oklch(0.393 0.095 152.535);
-  }
+.overflow-auto {
+  overflow: auto;
 }
 
 ._highlight\(bg-yellow-200\ text-yellow-900\) {
@@ -96,38 +74,14 @@
   transition-timing-function: cubic-bezier(0.4,0,0.2,1);
 }
 
-.font-bold {
-  font-weight: 700;
-}
-
-.\?\@self\:child-count\>2\(_highlight\):has( > :nth-last-child(n+2):first-child) {
-  background-color: oklch(0.945 0.129 101.54);
-  color: oklch(0.421 0.095 57.708);
-}
-
-.mb-4 {
-  margin-bottom: 1rem;
-}
-
-.transition\(300ms\) {
-  transition-property: all;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4,0,0.2,1);
-}
-
-.div\(h1\(font-bold\)\ p\(mt-2\)\) > h1 {
-  font-weight: 700;
-}
-
-.div\(h1\(font-bold\)\ p\(mt-2\)\) > p {
+.mt-2 {
   margin-top: 0.5rem;
 }
 
-.card\(p-13\ bg-black\/50\ backdrop-blur-lg\ rounded-xl\ shadow-lg\) {
-  padding: 3.25rem;
-  backdrop-filter: blur(16px);
-  border-radius: 0.75rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+.mesh\(\[slate-100\,\ sky-200\]\,\ \[slate-300\,\ blue-300\]\) {
+  background-image: radial-gradient(circle at 51.8% 54.7%, slate-100 115%), radial-gradient(circle at 36.5% 43.4%, sky-200 105%), radial-gradient(circle at 74.0% 43.0%, slate-300 95%), radial-gradient(circle at 31.8% 79.9%, blue-300 85%);
+  background-size: cover;
+  background-blend-mode: screen, lighten;
 }
 
 .motion\(mass\:1\ stiffness\:180\ damping\:12\) {
@@ -140,26 +94,58 @@
   cursor: wait;
 }
 
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+@container (min-width: 640px) {
+  .\?\@container\>640px\(bg-green-200\ text-green-900\) {
+    background-color: oklch(0.925 0.084 155.995);
+    color: oklch(0.393 0.095 152.535);
+  }
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
 .resize-x {
   resize: horizontal;
 }
 
-@media (min-width: 1024px) {
-  .lg\(p-45\) {
-    padding: 11.25rem;
-  }
+.container-type-inline-size {
+  container-type: inline-size;
 }
 
-
-@media (min-width: 1024px) {
-  .lg\(p-69\) {
-    padding: 17.25rem;
-  }
+.max-w-5xl {
+  max-width: 64rem;
 }
 
+.w-full {
+  width: 100%;
+}
 
-@media (min-width: 1024px) {
-  .lg\(p-45\) {
-    padding: 11.25rem;
-  }
+.font-bold {
+  font-weight: 700;
+}
+
+.div\(div\(mt-4\)\) > div {
+  margin-top: 1rem;
+}
+
+.card\(p-13\ bg-black\/50\ backdrop-blur-lg\ rounded-xl\ shadow-lg\) {
+  padding: 3.25rem;
+  backdrop-filter: blur(16px);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.transition\(300ms\) {
+  transition-property: all;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4,0,0.2,1);
+}
+
+.border-dashed {
+  border-style: dashed;
 }
