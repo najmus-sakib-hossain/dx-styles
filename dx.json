@@ -8,6 +8,9 @@
     "repository": "https://dx.vercel.app/essensefromexistence/dx",
     "language": "auto-detected",
     "runtime": "auto-detected",
+    "compiler": "auto-detected",
+    "bundler": "auto-detected",
+    "interpreter": "auto-detected",
     "framework": "auto-detected",
     "packageManager": "auto-detected",
     "environment": {

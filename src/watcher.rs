@@ -1,3 +1,6 @@
+use std::time::Instant;
+use std::time::Duration;
+
 use crate::{
     cache::ClassnameCache, data_manager, engine::StyleEngine, generator, interner::ClassInterner,
     parser, utils,
@@ -79,12 +82,12 @@ pub fn process_file_remove(
 
     // Log changes if any classes were affected
     let total_duration = start.elapsed();
-    if a_f > 0 || r_f > 0 || a_g > 0 || r_g > 0 {
+    if _a_f > 0 || _r_f > 0 || a_g > 0 || r_g > 0 {
         utils::log_change(
             "⚡",
             path.parent().unwrap_or(Path::new(".")),
-            a_f,
-            r_f,
+            _a_f,
+            _r_f,
             output_file,
             a_g,
             r_g,
@@ -197,12 +200,12 @@ pub fn process_file_change(
 
     // Log changes if any classes were affected
     let total_duration = start.elapsed();
-    if a_f > 0 || r_f > 0 || a_g > 0 || r_g > 0 {
+    if _a_f > 0 || _r_f > 0 || a_g > 0 || r_g > 0 {
         utils::log_change(
             "✓",
             path.parent().unwrap_or(Path::new(".")),
-            a_f,
-            r_f,
+            _a_f,
+            _r_f,
             output_file,
             a_g,
             r_g,
@@ -241,9 +244,6 @@ pub fn needs_processing(
         return true;
     }
 
-    // No significant changes
-    false
-}
     // No significant changes
     false
 }
