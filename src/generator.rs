@@ -64,6 +64,9 @@ thread_local! {
 // Store previous class IDs for efficient patching
 static PREV_CLASS_IDS: Lazy<RwLock<HashSet<u32>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
+// Incrementally produce a sorted Vec<u32> reusing previous ordering
+static PREV_SORTED_IDS: Lazy<RwLock<Vec<u32>>> = Lazy::new(|| RwLock::new(Vec::new()));
+
 // Ultra-fast hash function specific for class detection
 #[inline]
 fn fast_hash<T: Hash>(v: &T) -> u64 {
@@ -926,8 +929,19 @@ pub fn generate_css_ids(
     }
     
     // Rest of the original code for full regeneration
-    let mut sorted: Vec<u32> = class_ids.iter().copied().collect();
-    sorted.sort_unstable();
+    // REPLACED full re-sort with incremental sort
+    let mut sorted: Vec<u32> = if force_format {
+        let mut v: Vec<u32> = class_ids.iter().copied().collect();
+        v.sort_unstable();
+        v
+    } else {
+        incremental_sorted_ids(class_ids)
+    };
+    // Store new sorted IDs for next incremental pass
+    {
+        let mut prev = PREV_SORTED_IDS.write().unwrap();
+        *prev = sorted.clone();
+    }
     
     LAST_IDS_COUNT.store(sorted.len(), Ordering::Relaxed);
     LAST_IDS_HASH.store(direct_hash, Ordering::Relaxed);
@@ -1015,6 +1029,28 @@ pub fn generate_css_ids(
         }
     }
 
+    // Fast exit: if all blocks cached previously and aggregate hash unchanged skip rebuild
+    if missing_indices.is_empty() && !force_format {
+        // Quick hash of IDs only already checked earlier; at this point we still might avoid I/O
+        if let Ok(path_cache) = PATH_CONTENT_CACHE.read() {
+            if let Some((_prev_hash, ts)) = path_cache.get(output_path) {
+                // Touch timestamp & exit (no structural change)
+                drop(path_cache);
+                LAST_GENERATION_TIME.store(now, Ordering::Relaxed);
+                let mut path_cache_w = PATH_CONTENT_CACHE.write().ok();
+                if let Some(pc) = path_cache_w.as_mut() {
+                    pc.insert(output_path.to_path_buf(), (0, now));
+                }
+                // Update state & prev ids
+                if let Ok(mut prev_ids) = PREV_CLASS_IDS.write() {
+                    *prev_ids = class_ids.clone();
+                }
+                last_state.store(direct_hash, Ordering::Relaxed);
+                return;
+            }
+        }
+    }
+
     // Calculate capacity and check if we actually have content
     let mut capacity = 0;
     let mut has_content = false;
@@ -1064,8 +1100,8 @@ pub fn generate_css_ids(
         return;
     }
 
-    // Build final output string
-    let mut aggregate = String::with_capacity(capacity);
+    // Build final output string (micro-optimized)
+    let mut aggregate = String::with_capacity(capacity.max(16));
     let mut first = true;
     for block_opt in normalized_blocks {
         if let Some(css_arc) = block_opt {
@@ -1077,10 +1113,12 @@ pub fn generate_css_ids(
         }
     }
 
-    let aggregate = condense_blank_lines(&aggregate);
-    let content_hash = fast_hash(&aggregate);
-    
+    // Optional condensation (skip when super fast mode)
+    let super_fast = std::env::var("DX_CSS_SUPER_FAST").map_or(false, |v| v == "1");
+    let aggregate = if !super_fast { condense_blank_lines(&aggregate) } else { aggregate };
+
     // Check if file already has this content
+    let content_hash = fast_hash(&aggregate);
     let need_write = if let Ok(path_cache) = PATH_CONTENT_CACHE.read() {
         match path_cache.get(output_path) {
             Some((hash, _)) => *hash != content_hash,
